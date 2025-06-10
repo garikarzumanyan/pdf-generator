@@ -21,12 +21,12 @@ export default async function handler(req, res) {
     `${base}/print2/?product=Direct%20Mail/`,
     `${base}/print2/?product=MLE/`,
     `${base}/print2/?product=Profiles/`,
-    `${base}/enews1/`,
+    /*`${base}/enews1/`,
     `${base}/web1/`,
     `${base}/obg1/`,
     `${base}/obg1/?product=Profiles/`,
     `${base}/obg1/?product=Sponsored%20Content`,
-    `${base}/contact/`
+    `${base}/contact/`*/
   ];
 
   const browser = await puppeteer.launch({
@@ -68,7 +68,7 @@ export default async function handler(req, res) {
 
       const filePath = path.join(tempDir, `page${i + 1}.pdf`);
       console.log(`Rendering PDF: ${filePath} (${dimensions.width}x${dimensions.height})`);
-      
+
       await page.pdf({
         path: filePath,
         printBackground: true,
