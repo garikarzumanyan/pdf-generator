@@ -1,6 +1,8 @@
 {
   "dependencies": {
+    "@sparticuz/chromium": "^133.0.0",
     "pdf-merger-js": "^5.1.2",
-    "puppeteer": "^24.10.0"
+    "puppeteer": "^24.10.0",
+    "puppeteer-core": "^24.10.0"
   }
 }
