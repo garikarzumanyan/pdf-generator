@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     `${base}/print1/?product=Digital%20Edition/`,
     `${base}/print1/?product=Direct%20Mail/`,
     `${base}/print1/content-calendar//`,
-    `${base}/print2/`,
+    /*`${base}/print2/`,
     `${base}/print2/?product=Digital%20Edition/`,
     `${base}/print2/?product=Direct%20Mail/`,
     `${base}/print2/?product=MLE/`,
@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     `${base}/web1/`,
     `${base}/obg1/`,
     `${base}/obg1/?product=Profiles/`,
-    `${base}/obg1/?product=Sponsored%20Content`,
+    `${base}/obg1/?product=Sponsored%20Content`,*/
     `${base}/contact/`
   ];
 
