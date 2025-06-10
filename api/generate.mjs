@@ -1,8 +1,9 @@
-import puppeteer from 'puppeteer';
+import chromium from '@sparticuz/chromium';
+import puppeteer from 'puppeteer-core';
 import PDFMerger from 'pdf-merger-js';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 export default async function handler(req, res) {
   const slug = req.query.slug || 'cpc';
@@ -28,7 +29,12 @@ export default async function handler(req, res) {
     `${base}/contact/`
   ];
 
-  const browser = await puppeteer.launch({ headless: 'new' });
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
   const page = await browser.newPage();
   const merger = new PDFMerger();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
