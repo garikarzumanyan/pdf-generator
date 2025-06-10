@@ -1,10 +1,10 @@
-const puppeteer = require('puppeteer');
-const PDFMerger = require('pdf-merger-js').default;
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import puppeteer from 'puppeteer';
+import PDFMerger from 'pdf-merger-js';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   const slug = req.query.slug || 'cpc';
   const base = `https://www.officialmediaguide.com/${slug}`;
 
