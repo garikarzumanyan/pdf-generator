@@ -41,6 +41,8 @@ export default async function handler(req, res) {
 
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
+    console.log(`Processing (${i + 1}/${urls.length}): ${url}`);
+
     try {
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
 
@@ -65,6 +67,8 @@ export default async function handler(req, res) {
       });
 
       const filePath = path.join(tempDir, `page${i + 1}.pdf`);
+      console.log(`Rendering PDF: ${filePath} (${dimensions.width}x${dimensions.height})`);
+      
       await page.pdf({
         path: filePath,
         printBackground: true,
