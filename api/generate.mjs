@@ -5,57 +5,57 @@ import path from 'node:path';
 import os from 'node:os';
 import { PDFDocument } from 'pdf-lib';
 
+const urlsMap = {
+  cpc: [
+    `/`,
+    `/print/`,
+    `/print1/`,
+    `/print1/?product=Digital%20Edition`,
+    `/print1/?product=Direct%20Mail`,
+    `/print1/content-calendar`,
+    `/print2/`,
+    `/print2/?product=Digital%20Edition`,
+    `/print2/?product=Direct%20Mail`,
+    `/print2/?product=MLE`,
+    `/print2/?product=Profiles`,
+    `/enews1/`,
+    `/web1/`,
+    `/obg1/`,
+    `/obg1/?product=Profiles`,
+    `/obg1/?product=Sponsored%20Content`,
+    `/contact/`
+  ]
+};
+
 export default async function handler(req, res) {
   const slug = req.query.slug || 'cpc';
   const base = `https://www.officialmediaguide.com/${slug}`;
+  const urls = (urlsMap[slug] || []).map(u => `${base}${u.startsWith('/') ? '' : '/'}${u}`);
 
-  const urls = [
-    `${base}/`,
-    `${base}/print/`,
-    `${base}/print1/`,
-    `${base}/print1/?product=Digital%20Edition`,
-    `${base}/print1/?product=Direct%20Mail`,
-    `${base}/print1/content-calendar`,
-    `${base}/print2/`,
-    `${base}/print2/?product=Digital%20Edition`,
-    `${base}/print2/?product=Direct%20Mail`,
-    `${base}/print2/?product=MLE`,
-    `${base}/print2/?product=Profiles`,
-    `${base}/enews1/`,
-    `${base}/web1/`,
-    `${base}/obg1/`,
-    `${base}/obg1/?product=Profiles`,
-    `${base}/obg1/?product=Sponsored%20Content`,
-    `${base}/contact/`
-  ];
+  const batchSize = 4;
+  const tempDir = path.join(os.tmpdir(), `pdf-gen-${slug}`);
 
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+
+  // === Render All Batches Sequentially ===
+  const totalBatches = Math.ceil(urls.length / batchSize);
   const browser = await puppeteer.launch({
     args: chromium.args,
     defaultViewport: chromium.defaultViewport,
     executablePath: await chromium.executablePath(),
     headless: chromium.headless,
   });
-
   const page = await browser.newPage();
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
 
-  // Split URLs into batches of 4
-  const batchSize = 4;
-  const batches = [];
-  for (let i = 0; i < urls.length; i += batchSize) {
-    batches.push(urls.slice(i, i + batchSize));
-  }
+  for (let batch = 0; batch < totalBatches; batch++) {
+    const start = batch * batchSize;
+    const end = start + batchSize;
+    const batchUrls = urls.slice(start, end);
 
-  const mergedPdf = await PDFDocument.create();
-
-  for (let b = 0; b < batches.length; b++) {
-    const batch = batches[b];
-    const batchPaths = [];
-
-    for (let i = 0; i < batch.length; i++) {
-      const url = batch[i];
+    for (let i = 0; i < batchUrls.length; i++) {
+      const url = batchUrls[i];
       try {
-        console.log(`Rendering [Batch ${b + 1}] Page: ${url}`);
+        console.log(`Rendering [Batch ${batch}] Page: ${url}`);
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
 
         const dimensions = await page.evaluate(() => {
@@ -67,7 +67,7 @@ export default async function handler(req, res) {
           };
         });
 
-        const filePath = path.join(tempDir, `batch${b + 1}_page${i + 1}.pdf`);
+        const filePath = path.join(tempDir, `batch${batch}_page${i + 1}.pdf`);
         await page.pdf({
           path: filePath,
           printBackground: true,
@@ -76,24 +76,27 @@ export default async function handler(req, res) {
           pageRanges: '1',
           preferCSSPageSize: true,
         });
-
-        batchPaths.push(filePath);
       } catch (err) {
         console.warn(`Skipping ${url} due to error:`, err.message);
       }
     }
-
-    for (const pdfPath of batchPaths) {
-      const pdfBytes = fs.readFileSync(pdfPath);
-      const tempPdf = await PDFDocument.load(pdfBytes);
-      const copiedPages = await mergedPdf.copyPages(tempPdf, tempPdf.getPageIndices());
-      copiedPages.forEach(page => mergedPdf.addPage(page));
-    }
   }
 
   await browser.close();
-  const finalPdfBytes = await mergedPdf.save();
 
+  // === Merge All PDFs ===
+  const pdfDoc = await PDFDocument.create();
+  const files = fs.readdirSync(tempDir).filter(f => f.endsWith('.pdf'));
+
+  for (const file of files) {
+    const pdfPath = path.join(tempDir, file);
+    const pdfBytes = fs.readFileSync(pdfPath);
+    const tempPdf = await PDFDocument.load(pdfBytes);
+    const copiedPages = await pdfDoc.copyPages(tempPdf, tempPdf.getPageIndices());
+    copiedPages.forEach(p => pdfDoc.addPage(p));
+  }
+
+  const finalPdfBytes = await pdfDoc.save();
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${slug}.pdf"`);
   res.send(Buffer.from(finalPdfBytes));
