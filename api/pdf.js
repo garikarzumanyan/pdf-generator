@@ -5,7 +5,6 @@ import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { v4 as uuidv4 } from 'uuid';
 
 export default async function handler(req, res) {
   const { slug, url, hideSelectors = '' } = req.query;
@@ -27,8 +26,10 @@ export default async function handler(req, res) {
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
 
     if (hideSelectors) {
+      // Basic sanitization: disallow characters that could break CSS syntax
+      const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
       await page.addStyleTag({
-        content: `${hideSelectors} { display: none !important; }`
+        content: `${safeSelectors} { display: none !important; }`
       });
     }
 
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
     });
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
-    const filename = `${slug}-${uuidv4()}.pdf`;
+    const filename = `${slug}.pdf`; // consistent filename for caching/deduplication
     const filePath = path.join(tempDir, filename);
 
     await page.pdf({
@@ -55,6 +56,11 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${slug}.pdf"`);
     res.send(pdfBuffer);
+
+    // Clean up the temporary PDF file and directory
+    fs.unlinkSync(filePath);
+    fs.rmdirSync(tempDir, { recursive: true });
+
   } catch (err) {
     console.error('PDF generation failed:', err);
     res.status(500).json({ error: 'PDF generation failed.' });
