@@ -33,24 +33,24 @@ export default async function handler(req, res) {
   const urls = (urlsMap[slug] || []).map(u => `${base}${u.startsWith('/') ? '' : '/'}${u}`);
 
   const batchSize = 4;
-  const tempDir = path.join(os.tmpdir(), `pdf-gen-${slug}`);
+  const tempDir = path.join(os.tmpdir(), `pdf-gen-${slug}-${Date.now()}`);
+  fs.mkdirSync(tempDir, { recursive: true });
 
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+  const mergedPdf = await PDFDocument.create();
 
-  // === Render All Batches Sequentially ===
-  const totalBatches = Math.ceil(urls.length / batchSize);
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
-  });
-  const page = await browser.newPage();
-
-  for (let batch = 0; batch < totalBatches; batch++) {
+  for (let batch = 0; batch < Math.ceil(urls.length / batchSize); batch++) {
     const start = batch * batchSize;
     const end = start + batchSize;
     const batchUrls = urls.slice(start, end);
+
+    const browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+
+    const page = await browser.newPage();
 
     for (let i = 0; i < batchUrls.length; i++) {
       const url = batchUrls[i];
@@ -76,27 +76,20 @@ export default async function handler(req, res) {
           pageRanges: '1',
           preferCSSPageSize: true,
         });
+
+        const pdfBytes = fs.readFileSync(filePath);
+        const tempPdf = await PDFDocument.load(pdfBytes);
+        const copiedPages = await mergedPdf.copyPages(tempPdf, tempPdf.getPageIndices());
+        copiedPages.forEach(p => mergedPdf.addPage(p));
       } catch (err) {
         console.warn(`Skipping ${url} due to error:`, err.message);
       }
     }
+
+    await browser.close();
   }
 
-  await browser.close();
-
-  // === Merge All PDFs ===
-  const pdfDoc = await PDFDocument.create();
-  const files = fs.readdirSync(tempDir).filter(f => f.endsWith('.pdf'));
-
-  for (const file of files) {
-    const pdfPath = path.join(tempDir, file);
-    const pdfBytes = fs.readFileSync(pdfPath);
-    const tempPdf = await PDFDocument.load(pdfBytes);
-    const copiedPages = await pdfDoc.copyPages(tempPdf, tempPdf.getPageIndices());
-    copiedPages.forEach(p => pdfDoc.addPage(p));
-  }
-
-  const finalPdfBytes = await pdfDoc.save();
+  const finalPdfBytes = await mergedPdf.save();
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${slug}.pdf"`);
   res.send(Buffer.from(finalPdfBytes));
