@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-    await page.waitForTimeout(2000); // let it settle for 2 seconds
+    await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s to allow lazy content
 
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
