@@ -1,5 +1,3 @@
-// api/pdf.js (to be hosted externally)
-
 import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
@@ -13,24 +11,23 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing slug or url.' });
   }
 
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
-  });
+  console.log(`Starting PDF generation for: ${url} with slug: ${slug}`);
 
-  const page = await browser.newPage();
-
+  let browser;
   try {
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 });
+    browser = await puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
     if (hideSelectors) {
-      // Basic sanitization: disallow characters that could break CSS syntax
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
-      await page.addStyleTag({
-        content: `${safeSelectors} { display: none !important; }`
-      });
+      await page.addStyleTag({ content: `${safeSelectors} { display: none !important; }` });
     }
 
     const dimensions = await page.evaluate(() => {
@@ -40,16 +37,17 @@ export default async function handler(req, res) {
       };
     });
 
+    console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
+
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
-    const filename = `${slug}.pdf`; // consistent filename for caching/deduplication
-    const filePath = path.join(tempDir, filename);
+    const filePath = path.join(tempDir, `${slug}.pdf`);
 
     await page.pdf({
       path: filePath,
       printBackground: true,
       width: `${dimensions.width}px`,
       height: `${dimensions.height}px`,
-      preferCSSPageSize: true
+      preferCSSPageSize: true,
     });
 
     const pdfBuffer = fs.readFileSync(filePath);
@@ -57,14 +55,14 @@ export default async function handler(req, res) {
     res.setHeader('Content-Disposition', `attachment; filename="${slug}.pdf"`);
     res.send(pdfBuffer);
 
-    // Clean up the temporary PDF file and directory
     fs.unlinkSync(filePath);
     fs.rmdirSync(tempDir, { recursive: true });
 
+    console.log(`PDF generation successful for: ${url}`);
   } catch (err) {
-    console.error('PDF generation failed:', err);
-    res.status(500).json({ error: 'PDF generation failed.' });
+    console.error(`PDF generation failed for ${url}:`, err.message);
+    res.status(500).json({ error: 'PDF generation failed.', detail: err.message });
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
   }
 }
