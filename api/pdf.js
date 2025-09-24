@@ -23,21 +23,8 @@ export default async function handler(req, res) {
     });
 
     const page = await browser.newPage();
-    
-    // Set a proper viewport
-    await page.setViewport({
-      width: 1280,
-      height: 800,
-      deviceScaleFactor: 1,
-    });
-    
-    await page.goto(url, { 
-      waitUntil: 'networkidle0', 
-      timeout: 30000 
-    });
-    
-    // Wait for content to load
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s to allow lazy content
 
     // Replace Elementor counter text with target values
     console.log('Setting Elementor counter values to target values...');
@@ -51,8 +38,10 @@ export default async function handler(req, res) {
         const originalValue = counter.textContent;
         
         if (targetValue) {
+          // Set the counter text to the target value
           counter.textContent = targetValue;
           
+          // Also add the "+" or "%" suffix if it was in the original text
           if (originalValue.includes('+')) {
             counter.textContent += '+';
           } else if (originalValue.includes('%')) {
@@ -72,30 +61,18 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
-    // Remove footer elements completely
-    console.log('Removing footer elements...');
-    await page.evaluate(() => {
-      const colophon = document.getElementById('colophon');
-      if (colophon) {
-        colophon.remove();
-      }
-      
-      const footerElements = document.querySelectorAll('footer, .footer, .site-footer, #bottom-footer');
-      footerElements.forEach(el => el.remove());
-      
-      const cookieElements = document.querySelectorAll('#wpconsent-root, .cookie-consent, .cookie-notice');
-      cookieElements.forEach(el => el.remove());
-    });
-
     // Add CSS to ensure clean layout
     await page.addStyleTag({ 
       content: `
+        /* Ensure body has no bottom spacing */
         body {
-          margin: 0 !important;
-          padding: 0 !important;
+          margin-bottom: 0 !important;
+          padding-bottom: 0 !important;
           min-height: auto !important;
+          overflow: hidden !important;
         }
         
+        /* Remove any remaining footer spacing */
         .site-content,
         .content-area,
         .main-content,
@@ -104,14 +81,14 @@ export default async function handler(req, res) {
           padding-bottom: 0 !important;
         }
         
-        /* Prevent page breaks */
+        /* Ensure no page breaks are forced */
         * {
-          page-break-after: avoid !important;
-          page-break-before: avoid !important;
-          page-break-inside: avoid !important;
+          page-break-after: auto !important;
+          page-break-before: auto !important;
+          page-break-inside: auto !important;
         }
         
-        /* Remove sticky positioning */
+        /* Remove any sticky positioning that might cause issues */
         .sticky,
         .fixed,
         .fixed-top,
@@ -121,29 +98,30 @@ export default async function handler(req, res) {
       `
     });
 
-    // Handle exclude selectors
+    // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
       await page.addStyleTag({ content: `${safeSelectors} { display: none !important; }` });
     }
 
+    const dimensions = await page.evaluate(() => {
+      return {
+        width: Math.min(document.documentElement.scrollWidth, 1280),
+        height: document.documentElement.scrollHeight,
+      };
+    });
+
+    console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
+
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
 
-    // Use fullPage: true to let Puppeteer handle the page sizing automatically
     await page.pdf({
       path: filePath,
       printBackground: true,
-      fullPage: true, // This is the key change
-      preferCSSPageSize: false,
-      margin: {
-        top: '0px',
-        right: '0px',
-        bottom: '0px',
-        left: '0px'
-      },
-      displayHeaderFooter: false,
-      scale: 1,
+      width: `${dimensions.width}px`,
+      height: `${dimensions.height}px`,
+      preferCSSPageSize: true,
     });
 
     const pdfBuffer = fs.readFileSync(filePath);
