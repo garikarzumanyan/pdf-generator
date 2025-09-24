@@ -26,6 +26,30 @@ export default async function handler(req, res) {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s to allow lazy content
 
+    // Enhanced debugging for Elementor counters
+    console.log('=== DEBUGGING ELEMENTOR COUNTERS ===');
+    
+    // First, let's see what's on the page
+    const pageContent = await page.evaluate(() => {
+      const counters = document.querySelectorAll('.elementor-counter-number');
+      const allElements = document.querySelectorAll('*');
+      
+      return {
+        totalElements: allElements.length,
+        counterElements: counters.length,
+        counterDetails: Array.from(counters).map(counter => ({
+          textContent: counter.textContent,
+          toValue: counter.dataset.toValue,
+          fromValue: counter.dataset.fromValue,
+          duration: counter.dataset.duration
+        })),
+        pageTitle: document.title,
+        bodyClasses: document.body.className
+      };
+    });
+    
+    console.log('Page analysis:', JSON.stringify(pageContent, null, 2));
+
     // Wait for Elementor counters to complete their animation
     try {
       console.log('Waiting for Elementor counters to complete...');
