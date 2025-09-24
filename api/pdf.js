@@ -61,6 +61,44 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
+    // Hide #colophon and related footer elements with CSS
+    console.log('Hiding footer elements with CSS...');
+    await page.addStyleTag({ 
+      content: `
+        #colophon,
+        #colophon *,
+        .naylor-footer-background,
+        .naylor-footer-background *,
+        #bottom-footer,
+        #bottom-footer *,
+        #wpconsent-root,
+        #wpconsent-root * {
+          display: none !important;
+          visibility: hidden !important;
+          height: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+        }
+        
+        /* Ensure no page breaks are caused by hidden elements */
+        #colophon,
+        .naylor-footer-background,
+        #bottom-footer,
+        #wpconsent-root {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+        
+        /* Remove any spacing that might be left behind */
+        body {
+          margin-bottom: 0 !important;
+          padding-bottom: 0 !important;
+        }
+      `
+    });
+
+    // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
       await page.addStyleTag({ content: `${safeSelectors} { display: none !important; }` });
