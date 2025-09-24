@@ -65,27 +65,16 @@ export default async function handler(req, res) {
     console.log('Hiding footer elements with CSS...');
     await page.addStyleTag({ 
       content: `
-        #colophon,
-        #colophon *,
-        .naylor-footer-background,
-        .naylor-footer-background *,
-        #bottom-footer,
-        #bottom-footer *,
-        #wpconsent-root,
-        #wpconsent-root * {
-          display: none !important;
-          visibility: hidden !important;
+        #colophon .naylor-footer-background {
           height: 0 !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: hidden !important;
         }
-        
+   
         /* Ensure no page breaks are caused by hidden elements */
-        #colophon,
-        .naylor-footer-background,
-        #bottom-footer,
-        #wpconsent-root {
+        #colophon .naylor-footer-background,
+        #colophon .tg-container {
           page-break-inside: avoid !important;
           break-inside: avoid !important;
         }
