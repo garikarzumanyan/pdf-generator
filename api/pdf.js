@@ -50,6 +50,38 @@ export default async function handler(req, res) {
     
     console.log('Page analysis:', JSON.stringify(pageContent, null, 2));
 
+    // Try to trigger Elementor counter animations
+    console.log('Attempting to trigger Elementor counter animations...');
+    
+    await page.evaluate(() => {
+      // Scroll to trigger animations
+      window.scrollTo(0, 0);
+      setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 100);
+      setTimeout(() => window.scrollTo(0, 0), 200);
+      
+      // Try to trigger Elementor waypoint animations
+      if (typeof elementorFrontend !== 'undefined') {
+        console.log('Elementor frontend found, triggering waypoints...');
+        elementorFrontend.hooks.doAction('frontend/element_ready/global', {});
+      }
+      
+      // Try to trigger any intersection observer animations
+      if (typeof IntersectionObserver !== 'undefined') {
+        console.log('IntersectionObserver available');
+      }
+      
+      // Force trigger any jQuery animations
+      if (typeof $ !== 'undefined') {
+        console.log('jQuery found, triggering animations...');
+        $('.elementor-counter-number').each(function() {
+          $(this).trigger('inview');
+        });
+      }
+    });
+
+    // Wait a bit for animations to start
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
     // Wait for Elementor counters to complete their animation
     try {
       console.log('Waiting for Elementor counters to complete...');
@@ -82,12 +114,22 @@ export default async function handler(req, res) {
         
         return allComplete;
       }, { 
-        timeout: 15000, // 15 second timeout
+        timeout: 20000, // Increased to 20 seconds
         polling: 100    // Check every 100ms
       });
     } catch (waitError) {
       if (waitError.name === 'TimeoutError') {
         console.log('Elementor counters timeout - proceeding with PDF generation anyway');
+        
+        // Log final counter values for debugging
+        const finalValues = await page.evaluate(() => {
+          const counters = document.querySelectorAll('.elementor-counter-number');
+          return Array.from(counters).map(counter => ({
+            textContent: counter.textContent,
+            toValue: counter.dataset.toValue
+          }));
+        });
+        console.log('Final counter values:', JSON.stringify(finalValues, null, 2));
       } else {
         console.log('Error waiting for Elementor counters:', waitError.message);
       }
