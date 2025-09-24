@@ -65,17 +65,15 @@ export default async function handler(req, res) {
     console.log('Hiding footer elements with CSS...');
     await page.addStyleTag({ 
       content: `
-        #colophon, 
-        #colophon .naylor-footer-background,
-        #colophon .tg-container {
+        #colophon, #colophon * {
           height: 0 !important;
           margin: 0 !important;
           padding: 0 !important;
           overflow: hidden !important;
+          background: yellow;
         }
    
         /* Ensure no page breaks are caused by hidden elements */
-        #colophon .naylor-footer-background,
         #colophon .tg-container {
           page-break-inside: avoid !important;
           break-inside: avoid !important;
