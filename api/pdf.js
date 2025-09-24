@@ -61,31 +61,6 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
-    // Hide #colophon and related footer elements with CSS
-    console.log('Hiding footer elements with CSS...');
-    await page.addStyleTag({ 
-      content: `
-        #colophon, #colophon * {
-          height: 0 !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          overflow: hidden !important;
-          background: yellow;
-        }
-   
-        /* Ensure no page breaks are caused by hidden elements */
-        #colophon .tg-container {
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        
-        /* Remove any spacing that might be left behind */
-        body {
-          margin-bottom: 0 !important;
-          padding-bottom: 0 !important;
-        }
-      `
-    });
 
     // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
