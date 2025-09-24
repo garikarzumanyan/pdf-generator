@@ -26,9 +26,40 @@ export default async function handler(req, res) {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s to allow lazy content
 
-    // Simple approach: wait for Elementor counters with a fixed delay
-    console.log('Waiting for Elementor counter animations...');
-    await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds for animations
+    // Replace Elementor counter text with target values
+    console.log('Setting Elementor counter values to target values...');
+    
+    const counterResults = await page.evaluate(() => {
+      const counters = document.querySelectorAll('.elementor-counter-number');
+      const results = [];
+      
+      counters.forEach(counter => {
+        const targetValue = counter.dataset.toValue;
+        const originalValue = counter.textContent;
+        
+        if (targetValue) {
+          // Set the counter text to the target value
+          counter.textContent = targetValue;
+          
+          // Also add the "+" or "%" suffix if it was in the original text
+          if (originalValue.includes('+')) {
+            counter.textContent += '+';
+          } else if (originalValue.includes('%')) {
+            counter.textContent += '%';
+          }
+          
+          results.push({
+            originalValue: originalValue,
+            targetValue: targetValue,
+            finalValue: counter.textContent
+          });
+        }
+      });
+      
+      return results;
+    });
+    
+    console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
