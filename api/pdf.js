@@ -61,6 +61,59 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
+    // Completely remove the footer and clean up layout
+    console.log('Removing footer elements...');
+    await page.evaluate(() => {
+      // Remove the entire colophon element
+      const colophon = document.getElementById('colophon');
+      if (colophon) {
+        colophon.remove();
+      }
+      
+      // Remove any other footer-related elements
+      const footerElements = document.querySelectorAll('footer, .footer, .site-footer, #bottom-footer');
+      footerElements.forEach(el => el.remove());
+      
+      // Remove cookie consent elements
+      const cookieElements = document.querySelectorAll('#wpconsent-root, .cookie-consent, .cookie-notice');
+      cookieElements.forEach(el => el.remove());
+    });
+
+    // Add CSS to ensure clean layout
+    await page.addStyleTag({ 
+      content: `
+        /* Ensure body has no bottom spacing */
+        body {
+          margin-bottom: 0 !important;
+          padding-bottom: 0 !important;
+          min-height: auto !important;
+        }
+        
+        /* Remove any remaining footer spacing */
+        .site-content,
+        .content-area,
+        .main-content,
+        .page-content {
+          margin-bottom: 0 !important;
+          padding-bottom: 0 !important;
+        }
+        
+        /* Ensure no page breaks are forced */
+        * {
+          page-break-after: auto !important;
+          page-break-before: auto !important;
+          page-break-inside: auto !important;
+        }
+        
+        /* Remove any sticky positioning that might cause issues */
+        .sticky,
+        .fixed,
+        .fixed-top,
+        .fixed-bottom {
+          position: static !important;
+        }
+      `
+    });
 
     // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
