@@ -66,8 +66,6 @@ export default async function handler(req, res) {
       content: `
         /* Ensure body has no bottom spacing */
         #colophon > .naylor-footer-background {
-            padding: 0 !important;
-            margin: 0 !important;
             background: transparent !important
         }
       `
