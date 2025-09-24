@@ -79,42 +79,6 @@ export default async function handler(req, res) {
       cookieElements.forEach(el => el.remove());
     });
 
-    // Add CSS to ensure clean layout
-    await page.addStyleTag({ 
-      content: `
-        /* Ensure body has no bottom spacing */
-        body {
-          margin-bottom: 0 !important;
-          padding-bottom: 0 !important;
-          min-height: auto !important;
-        }
-        
-        /* Remove any remaining footer spacing */
-        .site-content,
-        .content-area,
-        .main-content,
-        .page-content {
-          margin-bottom: 0 !important;
-          padding-bottom: 0 !important;
-        }
-        
-        /* Ensure no page breaks are forced */
-        * {
-          page-break-after: auto !important;
-          page-break-before: auto !important;
-          page-break-inside: auto !important;
-        }
-        
-        /* Remove any sticky positioning that might cause issues */
-        .sticky,
-        .fixed,
-        .fixed-top,
-        .fixed-bottom {
-          position: static !important;
-        }
-      `
-    });
-
     // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
