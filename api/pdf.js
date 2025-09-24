@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
     
-    // Set a proper viewport to prevent scaling issues
+    // Set a proper viewport
     await page.setViewport({
       width: 1280,
       height: 800,
@@ -51,10 +51,8 @@ export default async function handler(req, res) {
         const originalValue = counter.textContent;
         
         if (targetValue) {
-          // Set the counter text to the target value
           counter.textContent = targetValue;
           
-          // Also add the "+" or "%" suffix if it was in the original text
           if (originalValue.includes('+')) {
             counter.textContent += '+';
           } else if (originalValue.includes('%')) {
@@ -74,36 +72,30 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
-    // Remove footer elements completely to prevent page splitting
+    // Remove footer elements completely
     console.log('Removing footer elements...');
     await page.evaluate(() => {
-      // Remove the entire colophon element
       const colophon = document.getElementById('colophon');
       if (colophon) {
         colophon.remove();
       }
       
-      // Remove any other footer-related elements
       const footerElements = document.querySelectorAll('footer, .footer, .site-footer, #bottom-footer');
       footerElements.forEach(el => el.remove());
       
-      // Remove cookie consent elements
       const cookieElements = document.querySelectorAll('#wpconsent-root, .cookie-consent, .cookie-notice');
       cookieElements.forEach(el => el.remove());
     });
 
-    // Add CSS to ensure clean layout and prevent page breaks
+    // Add CSS to ensure clean layout
     await page.addStyleTag({ 
       content: `
-        /* Ensure body has no bottom spacing */
         body {
-          margin-bottom: 0 !important;
-          padding-bottom: 0 !important;
+          margin: 0 !important;
+          padding: 0 !important;
           min-height: auto !important;
-          height: auto !important;
         }
         
-        /* Remove any remaining footer spacing */
         .site-content,
         .content-area,
         .main-content,
@@ -119,57 +111,31 @@ export default async function handler(req, res) {
           page-break-inside: avoid !important;
         }
         
-        /* Remove any sticky positioning that might cause issues */
+        /* Remove sticky positioning */
         .sticky,
         .fixed,
         .fixed-top,
         .fixed-bottom {
           position: static !important;
         }
-        
-        /* Ensure no overflow issues */
-        html, body {
-          overflow-x: hidden !important;
-          overflow-y: visible !important;
-        }
       `
     });
 
-    // Handle any existing exclude selectors from the WordPress plugin
+    // Handle exclude selectors
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
       await page.addStyleTag({ content: `${safeSelectors} { display: none !important; }` });
     }
 
-    // Get accurate page dimensions
-    const dimensions = await page.evaluate(() => {
-      // Get the actual content height
-      const bodyHeight = Math.max(
-        document.body.scrollHeight,
-        document.body.offsetHeight,
-        document.documentElement.clientHeight,
-        document.documentElement.scrollHeight,
-        document.documentElement.offsetHeight
-      );
-      
-      return {
-        width: Math.min(document.documentElement.scrollWidth, 1280),
-        height: bodyHeight,
-      };
-    });
-
-    console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
-
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
 
-    // Generate PDF with proper parameters to prevent page splitting
+    // Use fullPage: true to let Puppeteer handle the page sizing automatically
     await page.pdf({
       path: filePath,
       printBackground: true,
-      width: `${dimensions.width}px`,
-      height: `${dimensions.height}px`,
-      preferCSSPageSize: false, // Changed to false to use our dimensions
+      fullPage: true, // This is the key change
+      preferCSSPageSize: false,
       margin: {
         top: '0px',
         right: '0px',
