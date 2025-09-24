@@ -23,8 +23,21 @@ export default async function handler(req, res) {
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-    await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s to allow lazy content
+    
+    // Set a proper viewport to prevent scaling issues
+    await page.setViewport({
+      width: 1280,
+      height: 800,
+      deviceScaleFactor: 1,
+    });
+    
+    await page.goto(url, { 
+      waitUntil: 'networkidle0', 
+      timeout: 30000 
+    });
+    
+    // Wait for content to load
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     // Replace Elementor counter text with target values
     console.log('Setting Elementor counter values to target values...');
@@ -61,7 +74,7 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
-    // Completely remove the footer and clean up layout
+    // Remove footer elements completely to prevent page splitting
     console.log('Removing footer elements...');
     await page.evaluate(() => {
       // Remove the entire colophon element
@@ -79,16 +92,69 @@ export default async function handler(req, res) {
       cookieElements.forEach(el => el.remove());
     });
 
+    // Add CSS to ensure clean layout and prevent page breaks
+    await page.addStyleTag({ 
+      content: `
+        /* Ensure body has no bottom spacing */
+        body {
+          margin-bottom: 0 !important;
+          padding-bottom: 0 !important;
+          min-height: auto !important;
+          height: auto !important;
+        }
+        
+        /* Remove any remaining footer spacing */
+        .site-content,
+        .content-area,
+        .main-content,
+        .page-content {
+          margin-bottom: 0 !important;
+          padding-bottom: 0 !important;
+        }
+        
+        /* Prevent page breaks */
+        * {
+          page-break-after: avoid !important;
+          page-break-before: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        
+        /* Remove any sticky positioning that might cause issues */
+        .sticky,
+        .fixed,
+        .fixed-top,
+        .fixed-bottom {
+          position: static !important;
+        }
+        
+        /* Ensure no overflow issues */
+        html, body {
+          overflow-x: hidden !important;
+          overflow-y: visible !important;
+        }
+      `
+    });
+
     // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
       await page.addStyleTag({ content: `${safeSelectors} { display: none !important; }` });
     }
 
+    // Get accurate page dimensions
     const dimensions = await page.evaluate(() => {
+      // Get the actual content height
+      const bodyHeight = Math.max(
+        document.body.scrollHeight,
+        document.body.offsetHeight,
+        document.documentElement.clientHeight,
+        document.documentElement.scrollHeight,
+        document.documentElement.offsetHeight
+      );
+      
       return {
         width: Math.min(document.documentElement.scrollWidth, 1280),
-        height: document.documentElement.scrollHeight,
+        height: bodyHeight,
       };
     });
 
@@ -97,12 +163,21 @@ export default async function handler(req, res) {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
 
+    // Generate PDF with proper parameters to prevent page splitting
     await page.pdf({
       path: filePath,
       printBackground: true,
       width: `${dimensions.width}px`,
       height: `${dimensions.height}px`,
-      preferCSSPageSize: true,
+      preferCSSPageSize: false, // Changed to false to use our dimensions
+      margin: {
+        top: '0px',
+        right: '0px',
+        bottom: '0px',
+        left: '0px'
+      },
+      displayHeaderFooter: false,
+      scale: 1,
     });
 
     const pdfBuffer = fs.readFileSync(filePath);
