@@ -24,16 +24,13 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
     
-    // Set global timeout to 120 seconds for all Puppeteer operations
     page.setDefaultTimeout(120000);
     
-    // Navigate to page with increased timeout
     await page.goto(url, { 
       waitUntil: 'networkidle0',
       timeout: 120000
     });
     
-    // Wait for initial content to load
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     console.log('Setting Elementor counter values to target values...');
@@ -84,22 +81,18 @@ export default async function handler(req, res) {
       console.log(`Applied hide selectors: ${safeSelectors}`);
     }
 
-    // Scroll to bottom to trigger lazy-loaded images
     console.log('Scrolling to bottom to trigger lazy-loaded images...');
     await page.evaluate(() => {
       window.scrollTo(0, document.body.scrollHeight);
     });
     
-    // Wait for lazy images to load
     await new Promise(resolve => setTimeout(resolve, 3000));
     
-    // Scroll back to top for PDF capture
     console.log('Scrolling back to top...');
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
     
-    // Wait for scroll to complete
     await new Promise(resolve => setTimeout(resolve, 2000));
 
     const dimensions = await page.evaluate(() => {
@@ -116,7 +109,6 @@ export default async function handler(req, res) {
 
     console.log('Starting PDF generation...');
     
-    // Generate PDF - uses global timeout from page.setDefaultTimeout()
     await page.pdf({
       path: filePath,
       printBackground: true,
@@ -133,7 +125,7 @@ export default async function handler(req, res) {
     res.send(pdfBuffer);
 
     fs.unlinkSync(filePath);
-    fs.rmdirSync(tempDir, { recursive: true });
+    fs.rmSync(tempDir, { recursive: true, force: true });  // ← FIXED: Updated from rmdirSync
 
     console.log(`PDF generation successful for: ${url}`);
   } catch (err) {
