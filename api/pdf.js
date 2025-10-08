@@ -24,14 +24,14 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
     
-    page.setDefaultTimeout(150000);
+    page.setDefaultTimeout(120000);
     
     await page.goto(url, { 
       waitUntil: 'networkidle0',
-      timeout: 150000
+      timeout: 120000
     });
     
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
     console.log('Setting Elementor counter values to target values...');
     
