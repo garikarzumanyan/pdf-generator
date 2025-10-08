@@ -23,8 +23,18 @@ export default async function handler(req, res) {
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-    await new Promise(resolve => setTimeout(resolve, 2000)); // wait 2s to allow lazy content
+    
+    // Set global timeout to 60 seconds for all Puppeteer operations
+    page.setDefaultTimeout(60000);
+    
+    // Navigate to page with increased timeout and more lenient wait strategy
+    await page.goto(url, { 
+      waitUntil: 'networkidle0',  // Wait until no network connections for 500ms
+      timeout: 60000  // 60-second timeout
+    });
+    
+    // Wait additional time for lazy-loaded content and animations
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Increased to 3 seconds
 
     // Replace Elementor counter text with target values
     console.log('Setting Elementor counter values to target values...');
@@ -74,9 +84,13 @@ export default async function handler(req, res) {
     // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
-      await page.addStyleTag({ content: `${safeSelectors} { display: none !important; }` });
+      await page.addStyleTag({ 
+        content: `${safeSelectors} { display: none !important; }` 
+      });
+      console.log(`Applied hide selectors: ${safeSelectors}`);
     }
 
+    // Get page dimensions for PDF
     const dimensions = await page.evaluate(() => {
       return {
         width: Math.min(document.documentElement.scrollWidth, 1280),
@@ -86,9 +100,11 @@ export default async function handler(req, res) {
 
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
 
+    // Create temporary directory for PDF
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
 
+    // Generate PDF with the calculated dimensions
     await page.pdf({
       path: filePath,
       printBackground: true,
@@ -97,19 +113,27 @@ export default async function handler(req, res) {
       preferCSSPageSize: true,
     });
 
+    // Read PDF and send response
     const pdfBuffer = fs.readFileSync(filePath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${slug}.pdf"`);
     res.send(pdfBuffer);
 
+    // Cleanup temporary files
     fs.unlinkSync(filePath);
     fs.rmdirSync(tempDir, { recursive: true });
 
     console.log(`PDF generation successful for: ${url}`);
   } catch (err) {
     console.error(`PDF generation failed for ${url}:`, err.message);
-    res.status(500).json({ error: 'PDF generation failed.', detail: err.message });
+    console.error('Full error:', err);
+    res.status(500).json({ 
+      error: 'PDF generation failed.', 
+      detail: err.message 
+    });
   } finally {
-    if (browser) await browser.close();
+    if (browser) {
+      await browser.close();
+    }
   }
 }
