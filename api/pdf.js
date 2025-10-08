@@ -103,6 +103,22 @@ export default async function handler(req, res) {
         const iframe = await page.$(`iframe[data-iframe-index="${iframeInfo.index}"]`);
         
         if (iframe) {
+          // Check if iframe is visible
+          const isVisible = await iframe.evaluate(el => {
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            return rect.width > 0 && 
+                   rect.height > 0 && 
+                   style.display !== 'none' && 
+                   style.visibility !== 'hidden' &&
+                   style.opacity !== '0';
+          });
+          
+          if (!isVisible) {
+            console.log(`Skipping hidden iframe ${iframeInfo.index} (${iframeInfo.src})`);
+            continue;
+          }
+          
           // Take screenshot of the iframe
           const screenshotBuffer = await iframe.screenshot({ encoding: 'base64' });
           
