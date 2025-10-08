@@ -25,18 +25,17 @@ export default async function handler(req, res) {
     const page = await browser.newPage();
     
     // Set global timeout to 120 seconds for all Puppeteer operations
-    page.setDefaultTimeout(12000);
+    page.setDefaultTimeout(120000);
     
-    // Navigate to page with increased timeout and more lenient wait strategy
+    // Navigate to page with increased timeout
     await page.goto(url, { 
-      waitUntil: 'networkidle0',  // Wait until no network connections for 500ms
-      timeout: 120000  // 120-second timeout
+      waitUntil: 'networkidle0',
+      timeout: 120000
     });
     
-    // Wait additional time for lazy-loaded content and animations
-    await new Promise(resolve => setTimeout(resolve, 20000)); // Increased to 10 seconds
+    // Wait for initial content to load
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Replace Elementor counter text with target values
     console.log('Setting Elementor counter values to target values...');
     
     const counterResults = await page.evaluate(() => {
@@ -48,10 +47,8 @@ export default async function handler(req, res) {
         const originalValue = counter.textContent;
         
         if (targetValue) {
-          // Set the counter text to the target value
           counter.textContent = targetValue;
           
-          // Also add the "+" or "%" suffix if it was in the original text
           if (originalValue.includes('+')) {
             counter.textContent += '+';
           } else if (originalValue.includes('%')) {
@@ -71,17 +68,14 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
-    // Add CSS to ensure clean layout
     await page.addStyleTag({ 
       content: `
-        /* Ensure body has no bottom spacing */
         #colophon > .naylor-footer-background {
             background: transparent !important
         }
       `
     });
 
-    // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
       await page.addStyleTag({ 
@@ -90,7 +84,24 @@ export default async function handler(req, res) {
       console.log(`Applied hide selectors: ${safeSelectors}`);
     }
 
-    // Get page dimensions for PDF
+    // Scroll to bottom to trigger lazy-loaded images
+    console.log('Scrolling to bottom to trigger lazy-loaded images...');
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    
+    // Wait for lazy images to load
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Scroll back to top for PDF capture
+    console.log('Scrolling back to top...');
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+    });
+    
+    // Wait for scroll to complete
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     const dimensions = await page.evaluate(() => {
       return {
         width: Math.min(document.documentElement.scrollWidth, 1280),
@@ -100,11 +111,12 @@ export default async function handler(req, res) {
 
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
 
-    // Create temporary directory for PDF
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
 
-    // Generate PDF with the calculated dimensions
+    console.log('Starting PDF generation...');
+    
+    // Generate PDF - uses global timeout from page.setDefaultTimeout()
     await page.pdf({
       path: filePath,
       printBackground: true,
@@ -113,13 +125,13 @@ export default async function handler(req, res) {
       preferCSSPageSize: true,
     });
 
-    // Read PDF and send response
+    console.log('PDF generation completed');
+
     const pdfBuffer = fs.readFileSync(filePath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${slug}.pdf"`);
     res.send(pdfBuffer);
 
-    // Cleanup temporary files
     fs.unlinkSync(filePath);
     fs.rmdirSync(tempDir, { recursive: true });
 
