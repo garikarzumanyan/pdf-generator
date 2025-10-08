@@ -2,7 +2,7 @@ import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import os from 'node:fs';
 
 export default async function handler(req, res) {
   const { slug, url, hideSelectors = '' } = req.query;
@@ -24,19 +24,16 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
     
-    // Set global timeout to 60 seconds for all Puppeteer operations
-    page.setDefaultTimeout(60000);
+    // Set global timeout to 120 seconds (2 minutes) for all operations
+    page.setDefaultTimeout(120000);
     
-    // Navigate to page with increased timeout and more lenient wait strategy
     await page.goto(url, { 
-      waitUntil: 'networkidle0',  // Wait until no network connections for 500ms
-      timeout: 60000  // 60-second timeout
+      waitUntil: 'networkidle0',
+      timeout: 60000  // Keep page load at 60s
     });
     
-    // Wait additional time for lazy-loaded content and animations
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Increased to 3 seconds
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Replace Elementor counter text with target values
     console.log('Setting Elementor counter values to target values...');
     
     const counterResults = await page.evaluate(() => {
@@ -48,10 +45,8 @@ export default async function handler(req, res) {
         const originalValue = counter.textContent;
         
         if (targetValue) {
-          // Set the counter text to the target value
           counter.textContent = targetValue;
           
-          // Also add the "+" or "%" suffix if it was in the original text
           if (originalValue.includes('+')) {
             counter.textContent += '+';
           } else if (originalValue.includes('%')) {
@@ -71,17 +66,14 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
-    // Add CSS to ensure clean layout
     await page.addStyleTag({ 
       content: `
-        /* Ensure body has no bottom spacing */
         #colophon > .naylor-footer-background {
             background: transparent !important
         }
       `
     });
 
-    // Handle any existing exclude selectors from the WordPress plugin
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
       await page.addStyleTag({ 
@@ -90,7 +82,6 @@ export default async function handler(req, res) {
       console.log(`Applied hide selectors: ${safeSelectors}`);
     }
 
-    // Get page dimensions for PDF
     const dimensions = await page.evaluate(() => {
       return {
         width: Math.min(document.documentElement.scrollWidth, 1280),
@@ -100,26 +91,28 @@ export default async function handler(req, res) {
 
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
 
-    // Create temporary directory for PDF
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
 
-    // Generate PDF with the calculated dimensions
+    console.log('Starting PDF generation...');
+    
+    // PDF generation with explicit timeout for tall pages
     await page.pdf({
       path: filePath,
       printBackground: true,
       width: `${dimensions.width}px`,
       height: `${dimensions.height}px`,
       preferCSSPageSize: true,
+      timeout: 120000  // 2 minutes for PDF generation
     });
 
-    // Read PDF and send response
+    console.log('PDF generation completed');
+
     const pdfBuffer = fs.readFileSync(filePath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${slug}.pdf"`);
     res.send(pdfBuffer);
 
-    // Cleanup temporary files
     fs.unlinkSync(filePath);
     fs.rmdirSync(tempDir, { recursive: true });
 
