@@ -65,6 +65,20 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
+    // Scroll to load all lazy iframes
+    console.log('Scrolling to load lazy iframes...');
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+    });
+    
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    await page.evaluate(() => {
+      window.scrollTo(0, 0);
+    });
+    
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     // Replace iframes with screenshots
     console.log('Processing iframes (Canva, YouTube, etc.)...');
     const iframeReplacements = await page.evaluate(async () => {
@@ -73,12 +87,10 @@ export default async function handler(req, res) {
       
       for (const iframe of iframes) {
         try {
-          // Get iframe dimensions
           const rect = iframe.getBoundingClientRect();
           const width = iframe.width || iframe.offsetWidth || rect.width || 560;
           const height = iframe.height || iframe.offsetHeight || rect.height || 315;
           
-          // Mark iframe for screenshot
           iframe.setAttribute('data-iframe-index', replacements.length);
           
           replacements.push({
@@ -119,24 +131,60 @@ export default async function handler(req, res) {
             continue;
           }
           
+          // Scroll iframe into view to ensure it's loaded
+          await iframe.evaluate(el => {
+            el.scrollIntoView({ behavior: 'instant', block: 'center' });
+          });
+          
+          // Wait for iframe content to load - give it extra time for Canva/embeds
+          console.log(`Waiting for iframe ${iframeInfo.index} content to load...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
           // Take screenshot of the iframe
           const screenshotBuffer = await iframe.screenshot({ encoding: 'base64' });
           
           // Replace iframe with image
-          await page.evaluate((index, screenshot, width, height) => {
+          await page.evaluate((index, screenshot, width, height, src) => {
             const iframe = document.querySelector(`iframe[data-iframe-index="${index}"]`);
             if (iframe) {
+              const container = document.createElement('div');
+              container.style.cssText = `
+                width: ${width}px;
+                height: ${height}px;
+                position: relative;
+                display: block;
+                border: 1px solid #ddd;
+                background: #f5f5f5;
+              `;
+              
               const img = document.createElement('img');
               img.src = `data:image/png;base64,${screenshot}`;
               img.style.cssText = `
-                width: ${width}px;
-                height: ${height}px;
+                width: 100%;
+                height: 100%;
                 display: block;
-                border: 1px solid #ddd;
               `;
-              iframe.parentNode.replaceChild(img, iframe);
+              
+              // Add small badge indicating it's an embed
+              const badge = document.createElement('div');
+              badge.style.cssText = `
+                position: absolute;
+                bottom: 10px;
+                right: 10px;
+                background: rgba(0,0,0,0.7);
+                color: white;
+                padding: 4px 8px;
+                font-size: 11px;
+                border-radius: 3px;
+              `;
+              badge.textContent = 'Embedded Content';
+              
+              container.appendChild(img);
+              container.appendChild(badge);
+              
+              iframe.parentNode.replaceChild(container, iframe);
             }
-          }, iframeInfo.index, screenshotBuffer, iframeInfo.width, iframeInfo.height);
+          }, iframeInfo.index, screenshotBuffer, iframeInfo.width, iframeInfo.height, iframeInfo.src);
           
           console.log(`Replaced iframe ${iframeInfo.index} (${iframeInfo.src}) with screenshot`);
         }
@@ -161,19 +209,18 @@ export default async function handler(req, res) {
       console.log(`Applied hide selectors: ${safeSelectors}`);
     }
 
-    console.log('Scrolling to bottom to trigger lazy-loaded images...');
+    console.log('Final scroll to load any remaining lazy images...');
     await page.evaluate(() => {
       window.scrollTo(0, document.body.scrollHeight);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
     
-    console.log('Scrolling back to top...');
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const dimensions = await page.evaluate(() => {
       return {
