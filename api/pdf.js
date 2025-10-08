@@ -2,7 +2,7 @@ import chromium from '@sparticuz/chromium';
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:fs';
+import os from 'node:os';  // ← FIXED: was 'node:fs', should be 'node:os'
 
 export default async function handler(req, res) {
   const { slug, url, hideSelectors = '' } = req.query;
@@ -24,12 +24,12 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
     
-    // Set global timeout to 120 seconds (2 minutes) for all operations
+    // Set global timeout to 120 seconds for all operations
     page.setDefaultTimeout(120000);
     
     await page.goto(url, { 
       waitUntil: 'networkidle0',
-      timeout: 60000  // Keep page load at 60s
+      timeout: 60000
     });
     
     await new Promise(resolve => setTimeout(resolve, 3000));
@@ -96,15 +96,27 @@ export default async function handler(req, res) {
 
     console.log('Starting PDF generation...');
     
-    // PDF generation with explicit timeout for tall pages
-    await page.pdf({
-      path: filePath,
-      printBackground: true,
-      width: `${dimensions.width}px`,
-      height: `${dimensions.height}px`,
-      preferCSSPageSize: true,
-      timeout: 120000  // 2 minutes for PDF generation
-    });
+    // Use A4 format for very tall pages, custom dimensions for normal pages
+    if (dimensions.height > 3000) {
+      console.log('Page is very tall, using A4 format with multiple pages');
+      
+      await page.pdf({
+        path: filePath,
+        printBackground: true,
+        format: 'A4',
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        timeout: 120000
+      });
+    } else {
+      await page.pdf({
+        path: filePath,
+        printBackground: true,
+        width: `${dimensions.width}px`,
+        height: `${dimensions.height}px`,
+        preferCSSPageSize: true,
+        timeout: 120000
+      });
+    }
 
     console.log('PDF generation completed');
 
