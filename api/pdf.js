@@ -24,14 +24,14 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
     
-    page.setDefaultTimeout(120000);
+    page.setDefaultTimeout(150000);
     
     await page.goto(url, { 
       waitUntil: 'networkidle0',
-      timeout: 120000
+      timeout: 150000
     });
     
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     console.log('Setting Elementor counter values to target values...');
     
@@ -65,27 +65,13 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
-    // Scroll to load all lazy iframes
-    console.log('Scrolling to load lazy iframes...');
-    await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight);
-    });
-    
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    await page.evaluate(() => {
-      window.scrollTo(0, 0);
-    });
-    
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Get iframe information
-    console.log('Processing iframes (Canva, YouTube, etc.)...');
+    // Replace iframes with video player placeholder
+    console.log('Replacing iframes with video player placeholders...');
     const iframeReplacements = await page.evaluate(() => {
       const iframes = document.querySelectorAll('iframe');
       const replacements = [];
       
-      for (const iframe of iframes) {
+      iframes.forEach((iframe, index) => {
         try {
           const rect = iframe.getBoundingClientRect();
           const style = window.getComputedStyle(iframe);
@@ -100,136 +86,95 @@ export default async function handler(req, res) {
                            style.opacity !== '0';
           
           if (isVisible && iframe.src) {
-            iframe.setAttribute('data-iframe-index', replacements.length);
+            const src = iframe.src;
+            let embedType = 'Video';
             
-            replacements.push({
-              index: replacements.length,
-              src: iframe.src,
-              width: width,
-              height: height
-            });
+            // Determine embed type
+            if (src.includes('youtube.com') || src.includes('youtu.be')) {
+              embedType = 'YouTube Video';
+            } else if (src.includes('vimeo.com')) {
+              embedType = 'Vimeo Video';
+            } else if (src.includes('canva.com')) {
+              embedType = 'Canva Presentation';
+            } else if (src.includes('player') || src.includes('video')) {
+              embedType = 'Video';
+            } else {
+              embedType = 'Embedded Content';
+            }
+            
+            // Create video player placeholder
+            const placeholder = document.createElement('div');
+            placeholder.style.cssText = `
+              width: ${width}px;
+              height: ${height}px;
+              position: relative;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              border-radius: 8px;
+              overflow: hidden;
+            `;
+            
+            // Create play button
+            const playButton = document.createElement('div');
+            playButton.style.cssText = `
+              width: 80px;
+              height: 80px;
+              background: rgba(255, 255, 255, 0.9);
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            `;
+            
+            // Create play triangle
+            const playTriangle = document.createElement('div');
+            playTriangle.style.cssText = `
+              width: 0;
+              height: 0;
+              border-style: solid;
+              border-width: 15px 0 15px 25px;
+              border-color: transparent transparent transparent #667eea;
+              margin-left: 6px;
+            `;
+            
+            playButton.appendChild(playTriangle);
+            placeholder.appendChild(playButton);
+            
+            // Add label at bottom
+            const label = document.createElement('div');
+            label.style.cssText = `
+              position: absolute;
+              bottom: 0;
+              left: 0;
+              right: 0;
+              background: rgba(0, 0, 0, 0.7);
+              color: white;
+              padding: 12px 16px;
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              font-size: 14px;
+              text-align: center;
+            `;
+            label.textContent = embedType;
+            
+            placeholder.appendChild(label);
+            
+            // Replace iframe
+            iframe.parentNode.replaceChild(placeholder, iframe);
+            
+            replacements.push({ embedType, width, height });
           }
         } catch (err) {
-          console.error('Error processing iframe:', err);
+          console.error('Error replacing iframe:', err);
         }
-      }
+      });
       
       return replacements;
     });
     
-    console.log(`Found ${iframeReplacements.length} visible iframes to process`);
-
-    // Screenshot each iframe by opening its URL in a new page
-    for (const iframeInfo of iframeReplacements) {
-      try {
-        console.log(`Screenshotting iframe ${iframeInfo.index} (${iframeInfo.src})...`);
-        
-        // Open iframe URL in new page
-        const iframePage = await browser.newPage();
-        await iframePage.setViewport({
-          width: Math.floor(iframeInfo.width),
-          height: Math.floor(iframeInfo.height)
-        });
-        
-        try {
-          await iframePage.goto(iframeInfo.src, { 
-            waitUntil: 'networkidle0',
-            timeout: 30000 
-          });
-          
-          // Wait for content to render
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          
-          // Take screenshot
-          const screenshotBuffer = await iframePage.screenshot({ 
-            encoding: 'base64',
-            fullPage: false
-          });
-          
-          await iframePage.close();
-          
-          // Replace iframe with image in main page
-          await page.evaluate((index, screenshot, width, height, src) => {
-            const iframe = document.querySelector(`iframe[data-iframe-index="${index}"]`);
-            if (iframe) {
-              const container = document.createElement('div');
-              container.style.cssText = `
-                width: ${width}px;
-                height: ${height}px;
-                position: relative;
-                display: block;
-                background: #f5f5f5;
-                border: 1px solid #ddd;
-                overflow: hidden;
-              `;
-              
-              const img = document.createElement('img');
-              img.src = `data:image/png;base64,${screenshot}`;
-              img.style.cssText = `
-                width: 100%;
-                height: 100%;
-                display: block;
-                object-fit: cover;
-              `;
-              
-              // Add small badge
-              const badge = document.createElement('div');
-              badge.style.cssText = `
-                position: absolute;
-                bottom: 8px;
-                right: 8px;
-                background: rgba(0,0,0,0.75);
-                color: white;
-                padding: 4px 10px;
-                font-size: 10px;
-                border-radius: 3px;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-              `;
-              badge.textContent = 'Embedded Content';
-              
-              container.appendChild(img);
-              container.appendChild(badge);
-              
-              iframe.parentNode.replaceChild(container, iframe);
-            }
-          }, iframeInfo.index, screenshotBuffer, iframeInfo.width, iframeInfo.height, iframeInfo.src);
-          
-          console.log(`✓ Replaced iframe ${iframeInfo.index} with screenshot`);
-          
-        } catch (err) {
-          console.error(`Failed to load iframe URL ${iframeInfo.src}:`, err.message);
-          await iframePage.close();
-          
-          // Create placeholder for failed iframe
-          await page.evaluate((index, width, height, src) => {
-            const iframe = document.querySelector(`iframe[data-iframe-index="${index}"]`);
-            if (iframe) {
-              const placeholder = document.createElement('div');
-              placeholder.style.cssText = `
-                width: ${width}px;
-                height: ${height}px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: #f0f0f0;
-                border: 2px dashed #ccc;
-                color: #666;
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                font-size: 14px;
-                text-align: center;
-                padding: 20px;
-              `;
-              placeholder.innerHTML = `<div>Embedded Content<br><small style="font-size: 11px; opacity: 0.7;">(${new URL(src).hostname})</small></div>`;
-              
-              iframe.parentNode.replaceChild(placeholder, iframe);
-            }
-          }, iframeInfo.index, iframeInfo.width, iframeInfo.height, iframeInfo.src);
-        }
-        
-      } catch (err) {
-        console.error(`Failed to process iframe ${iframeInfo.index}:`, err.message);
-      }
-    }
+    console.log(`Replaced ${iframeReplacements.length} iframes:`, JSON.stringify(iframeReplacements, null, 2));
 
     await page.addStyleTag({ 
       content: `
@@ -247,18 +192,19 @@ export default async function handler(req, res) {
       console.log(`Applied hide selectors: ${safeSelectors}`);
     }
 
-    console.log('Final scroll to load any remaining lazy images...');
+    console.log('Scrolling to bottom to trigger lazy-loaded images...');
     await page.evaluate(() => {
       window.scrollTo(0, document.body.scrollHeight);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 3000));
     
+    console.log('Scrolling back to top...');
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     const dimensions = await page.evaluate(() => {
       return {
