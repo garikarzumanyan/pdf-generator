@@ -65,88 +65,69 @@ export default async function handler(req, res) {
     
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
 
-    // Replace YouTube iframes with thumbnails
-    console.log('Replacing YouTube videos with thumbnails...');
-    const videoReplacements = await page.evaluate(() => {
-      const iframes = document.querySelectorAll('iframe[src*="youtube.com"], iframe[src*="youtu.be"]');
+    // Replace iframes with screenshots
+    console.log('Processing iframes (Canva, YouTube, etc.)...');
+    const iframeReplacements = await page.evaluate(async () => {
+      const iframes = document.querySelectorAll('iframe');
       const replacements = [];
       
-      iframes.forEach(iframe => {
-        // Extract video ID from YouTube URL
-        const src = iframe.src;
-        let videoId = null;
-        
-        // Handle different YouTube URL formats
-        if (src.includes('youtube.com/embed/')) {
-          videoId = src.split('youtube.com/embed/')[1].split('?')[0];
-        } else if (src.includes('youtu.be/')) {
-          videoId = src.split('youtu.be/')[1].split('?')[0];
-        }
-        
-        if (videoId) {
+      for (const iframe of iframes) {
+        try {
           // Get iframe dimensions
-          const width = iframe.width || iframe.offsetWidth || 560;
-          const height = iframe.height || iframe.offsetHeight || 315;
+          const rect = iframe.getBoundingClientRect();
+          const width = iframe.width || iframe.offsetWidth || rect.width || 560;
+          const height = iframe.height || iframe.offsetHeight || rect.height || 315;
           
-          // Create replacement container with thumbnail
-          const container = document.createElement('div');
-          container.style.cssText = `
-            width: ${width}px;
-            height: ${height}px;
-            position: relative;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          `;
-          
-          // Add thumbnail image
-          const thumbnail = document.createElement('img');
-          thumbnail.src = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
-          thumbnail.style.cssText = `
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-          `;
-          
-          // Add play button overlay
-          const playButton = document.createElement('div');
-          playButton.style.cssText = `
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 68px;
-            height: 48px;
-            background: rgba(255, 0, 0, 0.8);
-            border-radius: 12px;
-            cursor: pointer;
-          `;
-          playButton.innerHTML = `
-            <svg viewBox="0 0 68 48" width="68" height="48" style="display: block;">
-              <path d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="currentColor"></path>
-              <path d="M 45,24 27,14 27,34" fill="#fff"></path>
-            </svg>
-          `;
-          
-          container.appendChild(thumbnail);
-          container.appendChild(playButton);
-          
-          // Replace iframe with container
-          iframe.parentNode.replaceChild(container, iframe);
+          // Mark iframe for screenshot
+          iframe.setAttribute('data-iframe-index', replacements.length);
           
           replacements.push({
-            videoId: videoId,
+            index: replacements.length,
+            src: iframe.src,
             width: width,
             height: height
           });
+        } catch (err) {
+          console.error('Error processing iframe:', err);
         }
-      });
+      }
       
       return replacements;
     });
     
-    console.log('Replaced YouTube videos:', JSON.stringify(videoReplacements, null, 2));
+    console.log(`Found ${iframeReplacements.length} iframes to process`);
+
+    // Take screenshots of each iframe and replace them
+    for (const iframeInfo of iframeReplacements) {
+      try {
+        const iframe = await page.$(`iframe[data-iframe-index="${iframeInfo.index}"]`);
+        
+        if (iframe) {
+          // Take screenshot of the iframe
+          const screenshotBuffer = await iframe.screenshot({ encoding: 'base64' });
+          
+          // Replace iframe with image
+          await page.evaluate((index, screenshot, width, height) => {
+            const iframe = document.querySelector(`iframe[data-iframe-index="${index}"]`);
+            if (iframe) {
+              const img = document.createElement('img');
+              img.src = `data:image/png;base64,${screenshot}`;
+              img.style.cssText = `
+                width: ${width}px;
+                height: ${height}px;
+                display: block;
+                border: 1px solid #ddd;
+              `;
+              iframe.parentNode.replaceChild(img, iframe);
+            }
+          }, iframeInfo.index, screenshotBuffer, iframeInfo.width, iframeInfo.height);
+          
+          console.log(`Replaced iframe ${iframeInfo.index} (${iframeInfo.src}) with screenshot`);
+        }
+      } catch (err) {
+        console.error(`Failed to screenshot iframe ${iframeInfo.index}:`, err.message);
+      }
+    }
 
     await page.addStyleTag({ 
       content: `
