@@ -34,7 +34,7 @@ export default async function handler(req, res) {
     });
     
     // Wait additional time for lazy-loaded content and animations
-    await new Promise(resolve => setTimeout(resolve, 3000)); // Increased to 3 seconds
+    await new Promise(resolve => setTimeout(resolve, 10000)); // Increased to 10 seconds
 
     // Replace Elementor counter text with target values
     console.log('Setting Elementor counter values to target values...');
