@@ -176,6 +176,31 @@ export default async function handler(req, res) {
     
     console.log(`Replaced ${iframeReplacements.length} iframes:`, JSON.stringify(iframeReplacements, null, 2));
 
+    // ... (after the iframe replacement block)
+
+    // Check and open accordions
+    console.log('Checking and opening accordions...');
+
+    const accordionResults = await page.evaluate(() => {
+      const summaries = document.querySelectorAll('summary.e-n-accordion-item-title');
+      const count = summaries.length;
+      
+      summaries.forEach(summary => {
+        summary.click();
+      });
+      
+      return {
+        count,
+        opened: count > 0
+      };
+    });
+
+    console.log(`Accordion check: Found ${accordionResults.count} elements. Opened: ${accordionResults.opened}`);
+
+    // Wait for any animations or newly revealed content to settle
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+
     await page.addStyleTag({ 
       content: `
         #colophon > .naylor-footer-background {
