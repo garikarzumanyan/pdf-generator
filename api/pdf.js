@@ -24,14 +24,14 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
     
-    page.setDefaultTimeout(120000);
+    page.setDefaultTimeout(150000);
     
     await page.goto(url, { 
       waitUntil: 'networkidle0',
-      timeout: 120000
+      timeout: 150000
     });
     
-    await new Promise(resolve => setTimeout(resolve, 6000));
+    await new Promise(resolve => setTimeout(resolve, 10000));
 
     console.log('Setting Elementor counter values to target values...');
     
@@ -196,7 +196,7 @@ export default async function handler(req, res) {
     console.log(`Accordion check: Found ${accordionResults.count} elements. Opened: ${accordionResults.opened}`);
 
     // Wait for any animations or newly revealed content to settle
-    await new Promise(resolve => setTimeout(resolve, 6000));
+    await new Promise(resolve => setTimeout(resolve, 10000));
 
 
     await page.addStyleTag({ 
@@ -220,14 +220,14 @@ export default async function handler(req, res) {
       window.scrollTo(0, document.body.scrollHeight);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 6000));
+    await new Promise(resolve => setTimeout(resolve, 10000));
     
     console.log('Scrolling back to top...');
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 6000));
+    await new Promise(resolve => setTimeout(resolve, 10000));
 
     const dimensions = await page.evaluate(() => {
       return {
