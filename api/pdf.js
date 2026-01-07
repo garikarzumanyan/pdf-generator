@@ -231,7 +231,7 @@ export default async function handler(req, res) {
 
     const dimensions = await page.evaluate(() => {
       return {
-        width: Math.min(document.documentElement.scrollWidth, 1440),
+        width: Math.min(document.documentElement.scrollWidth, 1600),
         height: document.documentElement.scrollHeight,
       };
     });
