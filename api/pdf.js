@@ -176,8 +176,6 @@ export default async function handler(req, res) {
     
     console.log(`Replaced ${iframeReplacements.length} iframes:`, JSON.stringify(iframeReplacements, null, 2));
 
-    // ... (after the iframe replacement block)
-
     // Check and open accordions
     console.log('Checking and opening accordions...');
 
@@ -198,7 +196,7 @@ export default async function handler(req, res) {
     console.log(`Accordion check: Found ${accordionResults.count} elements. Opened: ${accordionResults.opened}`);
 
     // Wait for any animations or newly revealed content to settle
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
 
     await page.addStyleTag({ 
@@ -222,18 +220,18 @@ export default async function handler(req, res) {
       window.scrollTo(0, document.body.scrollHeight);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 5000));
     
     console.log('Scrolling back to top...');
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
     
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     const dimensions = await page.evaluate(() => {
       return {
-        width: Math.min(document.documentElement.scrollWidth, 1280),
+        width: Math.min(document.documentElement.scrollWidth, 1440),
         height: document.documentElement.scrollHeight,
       };
     });
