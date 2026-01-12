@@ -214,16 +214,30 @@ export default async function handler(req, res) {
    
     await new Promise(resolve => setTimeout(resolve, 10000));
 
-    // NEW: Emulate print media before measuring dimensions to account for print-specific layout changes
+    // Emulate print media before measuring dimensions to account for print-specific layout changes
     await page.emulateMediaType('print');
 
     const dimensions = await page.evaluate(() => {
       return {
-        width: Math.min(document.documentElement.scrollWidth, 1500),
-        height: document.documentElement.scrollHeight + 0.1,  // NEW: Small buffer to prevent overflow-induced extra pages
+        width: Math.min(document.documentElement.scrollWidth, 1600),
+        height: document.documentElement.scrollHeight,
       };
     });
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
+
+    // Optional - Append hidden zero-height div to body as a layout sentinel
+    // Uncomment this block if the white line persists after adding zero margins below
+    /*
+    await page.evaluate(() => {
+      const sentinel = document.createElement('div');
+      sentinel.style.cssText = 'height: 0px; overflow: hidden; visibility: hidden;';
+      document.body.appendChild(sentinel);
+    });
+    // Re-calculate height after adding sentinel (in case it affects layout)
+    dimensions.height = await page.evaluate(() => document.documentElement.scrollHeight);
+    console.log(`Dimensions after sentinel: ${dimensions.width}x${dimensions.height}`);
+    */
+
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
     console.log('Starting PDF generation...');
@@ -233,7 +247,8 @@ export default async function handler(req, res) {
       printBackground: true,
       width: `${dimensions.width}px`,
       height: `${dimensions.height}px`,
-      preferCSSPageSize: false,  // CHANGED: Set to false to enforce your dimensions and prevent site CSS interference
+      preferCSSPageSize: false,
+      margin: { top: '0px', right: '0px', bottom: '0px', left: '0px' },
     });
     console.log('PDF generation completed');
     const pdfBuffer = fs.readFileSync(filePath);
