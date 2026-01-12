@@ -220,7 +220,7 @@ export default async function handler(req, res) {
     const dimensions = await page.evaluate(() => {
       return {
         width: Math.min(document.documentElement.scrollWidth, 1500),
-        height: document.documentElement.scrollHeight + 0,  // NEW: Small buffer to prevent overflow-induced extra pages
+        height: document.documentElement.scrollHeight + 0.1,  // NEW: Small buffer to prevent overflow-induced extra pages
       };
     });
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
