@@ -225,9 +225,7 @@ export default async function handler(req, res) {
     });
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
 
-    // Optional - Append hidden zero-height div to body as a layout sentinel
-    // Uncomment this block if the white line persists after adding zero margins below
-    /*
+    // Append hidden zero-height div to body as a layout sentinel
     await page.evaluate(() => {
       const sentinel = document.createElement('div');
       sentinel.style.cssText = 'height: 0px; overflow: hidden; visibility: hidden;';
@@ -236,7 +234,6 @@ export default async function handler(req, res) {
     // Re-calculate height after adding sentinel (in case it affects layout)
     dimensions.height = await page.evaluate(() => document.documentElement.scrollHeight);
     console.log(`Dimensions after sentinel: ${dimensions.width}x${dimensions.height}`);
-    */
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
