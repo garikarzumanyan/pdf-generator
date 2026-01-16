@@ -186,6 +186,36 @@ export default async function handler(req, res) {
     console.log(`Accordion check: Found ${accordionResults.count} elements. Opened: ${accordionResults.opened}`);
     // Wait for any animations or newly revealed content to settle
     await new Promise(resolve => setTimeout(resolve, 10000));
+
+    console.log('Forcing pie chart SVGs to final state...');
+
+    const chartResults = await page.evaluate(() => {
+      const paths = document.querySelectorAll('.elementor-widget-container svg path, .pie-chart-svg path');  // Adjust selector to match your charts' SVG paths
+      const results = [];
+      
+      paths.forEach(path => {
+        const originalOffset = path.getAttribute('stroke-dashoffset');
+        if (originalOffset !== null && parseFloat(originalOffset) !== 0) {
+          path.setAttribute('stroke-dashoffset', '0');  // Force to final (fully drawn) state
+          results.push({
+            element: path.tagName,
+            originalOffset,
+            newOffset: '0'
+          });
+        }
+      });
+      
+      return {
+        count: paths.length,
+        updated: results.length
+      };
+    });
+
+    console.log(`Pie chart updates: Found ${chartResults.count} paths. Updated: ${chartResults.updated}`);
+
+    // Wait for any reflow or rendering after forcing state
+    await new Promise(resolve => setTimeout(resolve, 10000));
+
     await page.addStyleTag({
       content: `
         #colophon > .naylor-footer-background {
