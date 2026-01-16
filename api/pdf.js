@@ -218,79 +218,63 @@ export default async function handler(req, res) {
    
     await new Promise(resolve => setTimeout(resolve, 10000));
 
-    // Moved chart forcing and color conversion here to handle potential lazy-loading
-    console.log('Forcing ApexCharts pie SVGs to final state...');
-
-    const chartResults = await page.evaluate(() => {
-      const paths = document.querySelectorAll('.apexcharts-canvas svg path');  // Targets ApexCharts SVG paths
+    // Rasterize ApexCharts to PNG images
+    console.log('Rasterizing ApexCharts to PNG images...');
+    const rasterResults = await page.evaluate(() => {
+      const charts = document.querySelectorAll('.apexcharts-canvas');
       const results = [];
       
-      paths.forEach(path => {
-        const originalOffset = path.getAttribute('stroke-dashoffset');
-        if (originalOffset !== null && parseFloat(originalOffset) !== 0) {
-          path.setAttribute('stroke-dashoffset', '0');  // Force to fully drawn
-          results.push({
-            element: path.tagName,
-            originalOffset,
-            newOffset: '0'
-          });
-        }
+      charts.forEach((chartDiv, index) => {
+        const svg = chartDiv.querySelector('svg');
+        if (!svg) return;
+        
+        // Get dimensions
+        const rect = chartDiv.getBoundingClientRect();
+        const width = rect.width;
+        const height = rect.height;
+        
+        // Create temporary canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Serialize SVG to string
+        const svgString = new XMLSerializer().serializeToString(svg);
+        const img = new Image();
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        
+        // Draw SVG on canvas (rasterize)
+        return new Promise((resolve) => {
+          img.onload = () => {
+            ctx.drawImage(img, 0, 0, width, height);
+            const pngDataUrl = canvas.toDataURL('image/png');
+            URL.revokeObjectURL(url);
+            
+            // Create img element
+            const pngImg = document.createElement('img');
+            pngImg.src = pngDataUrl;
+            pngImg.style.width = `${width}px`;
+            pngImg.style.height = `${height}px`;
+            pngImg.style.display = 'block';
+            
+            // Replace chart div with img
+            chartDiv.parentNode.replaceChild(pngImg, chartDiv);
+            
+            results.push({ index, width, height });
+            resolve();
+          };
+          img.src = url;
+        });
       });
       
-      return {
-        count: paths.length,
-        updated: results.length
-      };
+      return results;
     });
+    
+    console.log(`Rasterized ${rasterResults.length} charts:`, JSON.stringify(rasterResults, null, 2));
 
-    console.log(`ApexCharts updates: Found ${chartResults.count} paths. Updated: ${chartResults.updated}`);
-
-    // NEW: Convert hex colors in SVGs to RGB to fix Puppeteer rendering bug
-    console.log('Converting hex colors in SVGs to RGB...');
-    const colorConversions = await page.evaluate(() => {
-      function hexToRgb(hex) {
-        hex = hex.replace(/^#/, '');
-        if (hex.length === 3) {
-          hex = hex.split('').map(c => c + c).join('');
-        }
-        const r = parseInt(hex.substring(0, 2), 16);
-        const g = parseInt(hex.substring(2, 4), 16);
-        const b = parseInt(hex.substring(4, 6), 16);
-        return `rgb(${r},${g},${b})`;
-      }
-
-      const elements = document.querySelectorAll('svg [fill], svg [stroke]');
-      const conversions = [];
-
-      elements.forEach(el => {
-        let changed = false;
-        const fill = el.getAttribute('fill');
-        if (fill && fill.startsWith('#')) {
-          const newFill = hexToRgb(fill);
-          el.setAttribute('fill', newFill);
-          conversions.push({ attr: 'fill', original: fill, new: newFill });
-          changed = true;
-        }
-        const stroke = el.getAttribute('stroke');
-        if (stroke && stroke.startsWith('#')) {
-          const newStroke = hexToRgb(stroke);
-          el.setAttribute('stroke', newStroke);
-          conversions.push({ attr: 'stroke', original: stroke, new: newStroke });
-          changed = true;
-        }
-        if (changed) {
-          // Force reflow on the element
-          el.style.display = 'none';
-          el.offsetHeight; // Trigger reflow
-          el.style.display = '';
-        }
-      });
-
-      return conversions.length;
-    });
-    console.log(`Converted ${colorConversions} hex colors to RGB.`);
-
-    // Wait for reflow after chart manipulations
+    // Wait for reflow after replacement
     await new Promise(resolve => setTimeout(resolve, 15000));
 
     // Emulate print media before measuring dimensions to account for print-specific layout changes
@@ -299,7 +283,7 @@ export default async function handler(req, res) {
     const dimensions = await page.evaluate(() => {
       return {
         width: Math.min(document.documentElement.scrollWidth, 1500),
-        height: document.documentElement.scrollHeight + 0.01,  // Kept +0.01 as requested
+        height: document.documentElement.scrollHeight + 0.01,
       };
     });
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
