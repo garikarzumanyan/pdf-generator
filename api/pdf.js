@@ -187,39 +187,13 @@ export default async function handler(req, res) {
     // Wait for any animations or newly revealed content to settle
     await new Promise(resolve => setTimeout(resolve, 10000));
 
-    console.log('Forcing ApexCharts pie SVGs to final state...');
-
-const chartResults = await page.evaluate(() => {
-  const paths = document.querySelectorAll('.apexcharts-canvas svg path');  // Targets ApexCharts SVG paths
-  const results = [];
-  
-  paths.forEach(path => {
-    const originalOffset = path.getAttribute('stroke-dashoffset');
-    if (originalOffset !== null && parseFloat(originalOffset) !== 0) {
-      path.setAttribute('stroke-dashoffset', '0');  // Force to fully drawn
-      results.push({
-        element: path.tagName,
-        originalOffset,
-        newOffset: '0'
-      });
-    }
-  });
-  
-  return {
-    count: paths.length,
-    updated: results.length
-  };
-});
-
-console.log(`ApexCharts updates: Found ${chartResults.count} paths. Updated: ${chartResults.updated}`);
-
-// Wait for reflow
-await new Promise(resolve => setTimeout(resolve, 15000));
-
     await page.addStyleTag({
       content: `
         #colophon > .naylor-footer-background {
             background: transparent !important
+        };
+        html, body {
+          -webkit-print-color-adjust: exact !important; /* Ensure accurate color rendering in print */
         }
       `
     });
@@ -244,13 +218,88 @@ await new Promise(resolve => setTimeout(resolve, 15000));
    
     await new Promise(resolve => setTimeout(resolve, 10000));
 
-    // NEW: Emulate print media before measuring dimensions to account for print-specific layout changes
+    // Moved chart forcing and color conversion here to handle potential lazy-loading
+    console.log('Forcing ApexCharts pie SVGs to final state...');
+
+    const chartResults = await page.evaluate(() => {
+      const paths = document.querySelectorAll('.apexcharts-canvas svg path');  // Targets ApexCharts SVG paths
+      const results = [];
+      
+      paths.forEach(path => {
+        const originalOffset = path.getAttribute('stroke-dashoffset');
+        if (originalOffset !== null && parseFloat(originalOffset) !== 0) {
+          path.setAttribute('stroke-dashoffset', '0');  // Force to fully drawn
+          results.push({
+            element: path.tagName,
+            originalOffset,
+            newOffset: '0'
+          });
+        }
+      });
+      
+      return {
+        count: paths.length,
+        updated: results.length
+      };
+    });
+
+    console.log(`ApexCharts updates: Found ${chartResults.count} paths. Updated: ${chartResults.updated}`);
+
+    // NEW: Convert hex colors in SVGs to RGB to fix Puppeteer rendering bug
+    console.log('Converting hex colors in SVGs to RGB...');
+    const colorConversions = await page.evaluate(() => {
+      function hexToRgb(hex) {
+        hex = hex.replace(/^#/, '');
+        if (hex.length === 3) {
+          hex = hex.split('').map(c => c + c).join('');
+        }
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        return `rgb(${r},${g},${b})`;
+      }
+
+      const elements = document.querySelectorAll('svg [fill], svg [stroke]');
+      const conversions = [];
+
+      elements.forEach(el => {
+        let changed = false;
+        const fill = el.getAttribute('fill');
+        if (fill && fill.startsWith('#')) {
+          const newFill = hexToRgb(fill);
+          el.setAttribute('fill', newFill);
+          conversions.push({ attr: 'fill', original: fill, new: newFill });
+          changed = true;
+        }
+        const stroke = el.getAttribute('stroke');
+        if (stroke && stroke.startsWith('#')) {
+          const newStroke = hexToRgb(stroke);
+          el.setAttribute('stroke', newStroke);
+          conversions.push({ attr: 'stroke', original: stroke, new: newStroke });
+          changed = true;
+        }
+        if (changed) {
+          // Force reflow on the element
+          el.style.display = 'none';
+          el.offsetHeight; // Trigger reflow
+          el.style.display = '';
+        }
+      });
+
+      return conversions.length;
+    });
+    console.log(`Converted ${colorConversions} hex colors to RGB.`);
+
+    // Wait for reflow after chart manipulations
+    await new Promise(resolve => setTimeout(resolve, 15000));
+
+    // Emulate print media before measuring dimensions to account for print-specific layout changes
     await page.emulateMediaType('print');
 
     const dimensions = await page.evaluate(() => {
       return {
         width: Math.min(document.documentElement.scrollWidth, 1500),
-        height: document.documentElement.scrollHeight + 0.01,  // NEW: Small buffer to prevent overflow-induced extra pages
+        height: document.documentElement.scrollHeight + 0.01,  // Kept +0.01 as requested
       };
     });
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
@@ -263,7 +312,7 @@ await new Promise(resolve => setTimeout(resolve, 15000));
       printBackground: true,
       width: `${dimensions.width}px`,
       height: `${dimensions.height}px`,
-      preferCSSPageSize: false,  // CHANGED: Set to false to enforce your dimensions and prevent site CSS interference
+      preferCSSPageSize: false,
     });
     console.log('PDF generation completed');
     const pdfBuffer = fs.readFileSync(filePath);
