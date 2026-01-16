@@ -218,26 +218,22 @@ export default async function handler(req, res) {
    
     await new Promise(resolve => setTimeout(resolve, 10000));
 
-    // Rasterize ApexCharts to PNG images
+    // Wait for ApexCharts to be initialized
+    console.log('Waiting for ApexCharts containers...');
+    await page.waitForSelector('.apexcharts-canvas', { timeout: 30000 });
+
+    // Rasterizing ApexCharts to PNG images...
     console.log('Rasterizing ApexCharts to PNG images...');
-    const rasterResults = await page.evaluate(() => {
-      const charts = document.querySelectorAll('.apexcharts-canvas');
-      const results = [];
-      
-      charts.forEach((chartDiv, index) => {
+    const rasterResults = await page.evaluate(async () => {
+      const charts = [...document.querySelectorAll('.apexcharts-canvas')];
+      const promises = charts.map(async (chartDiv, index) => {
         const svg = chartDiv.querySelector('svg');
-        if (!svg) return;
+        if (!svg) return null;
         
         // Get dimensions
         const rect = chartDiv.getBoundingClientRect();
         const width = rect.width;
         const height = rect.height;
-        
-        // Create temporary canvas
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
         
         // Serialize SVG to string
         const svgString = new XMLSerializer().serializeToString(svg);
@@ -245,31 +241,38 @@ export default async function handler(req, res) {
         const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
         const url = URL.createObjectURL(svgBlob);
         
-        // Draw SVG on canvas (rasterize)
-        return new Promise((resolve) => {
-          img.onload = () => {
-            ctx.drawImage(img, 0, 0, width, height);
-            const pngDataUrl = canvas.toDataURL('image/png');
-            URL.revokeObjectURL(url);
-            
-            // Create img element
-            const pngImg = document.createElement('img');
-            pngImg.src = pngDataUrl;
-            pngImg.style.width = `${width}px`;
-            pngImg.style.height = `${height}px`;
-            pngImg.style.display = 'block';
-            
-            // Replace chart div with img
-            chartDiv.parentNode.replaceChild(pngImg, chartDiv);
-            
-            results.push({ index, width, height });
-            resolve();
-          };
+        // Wait for image load
+        await new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = () => resolve(); // Continue even if error
           img.src = url;
         });
+        
+        // Create canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        const pngDataUrl = canvas.toDataURL('image/png');
+        URL.revokeObjectURL(url);
+        
+        // Create img element
+        const pngImg = document.createElement('img');
+        pngImg.src = pngDataUrl;
+        pngImg.style.width = `${width}px`;
+        pngImg.style.height = `${height}px`;
+        pngImg.style.display = 'block';
+        
+        // Replace chart div with img
+        chartDiv.parentNode.replaceChild(pngImg, chartDiv);
+        
+        return { index, width, height };
       });
       
-      return results;
+      const results = await Promise.all(promises);
+      return results.filter(r => r !== null);
     });
     
     console.log(`Rasterized ${rasterResults.length} charts:`, JSON.stringify(rasterResults, null, 2));
