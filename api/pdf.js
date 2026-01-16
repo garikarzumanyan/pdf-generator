@@ -186,14 +186,10 @@ export default async function handler(req, res) {
     console.log(`Accordion check: Found ${accordionResults.count} elements. Opened: ${accordionResults.opened}`);
     // Wait for any animations or newly revealed content to settle
     await new Promise(resolve => setTimeout(resolve, 10000));
-
     await page.addStyleTag({
       content: `
         #colophon > .naylor-footer-background {
             background: transparent !important
-        };
-        html, body {
-          -webkit-print-color-adjust: exact !important; /* Ensure accurate color rendering in print */
         }
       `
     });
@@ -218,75 +214,13 @@ export default async function handler(req, res) {
    
     await new Promise(resolve => setTimeout(resolve, 10000));
 
-    // Wait for ApexCharts to be initialized
-    console.log('Waiting for ApexCharts containers...');
-    await page.waitForSelector('.apexcharts-canvas', { timeout: 30000 });
-
-    // Rasterizing ApexCharts to PNG images...
-    console.log('Rasterizing ApexCharts to PNG images...');
-    const rasterResults = await page.evaluate(async () => {
-      const charts = [...document.querySelectorAll('.apexcharts-canvas')];
-      const promises = charts.map(async (chartDiv, index) => {
-        const svg = chartDiv.querySelector('svg');
-        if (!svg) return null;
-        
-        // Get dimensions
-        const rect = chartDiv.getBoundingClientRect();
-        const width = rect.width;
-        const height = rect.height;
-        
-        // Serialize SVG to string
-        const svgString = new XMLSerializer().serializeToString(svg);
-        const img = new Image();
-        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
-        
-        // Wait for image load
-        await new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = () => resolve(); // Continue even if error
-          img.src = url;
-        });
-        
-        // Create canvas
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        const pngDataUrl = canvas.toDataURL('image/png');
-        URL.revokeObjectURL(url);
-        
-        // Create img element
-        const pngImg = document.createElement('img');
-        pngImg.src = pngDataUrl;
-        pngImg.style.width = `${width}px`;
-        pngImg.style.height = `${height}px`;
-        pngImg.style.display = 'block';
-        
-        // Replace chart div with img
-        chartDiv.parentNode.replaceChild(pngImg, chartDiv);
-        
-        return { index, width, height };
-      });
-      
-      const results = await Promise.all(promises);
-      return results.filter(r => r !== null);
-    });
-    
-    console.log(`Rasterized ${rasterResults.length} charts:`, JSON.stringify(rasterResults, null, 2));
-
-    // Wait for reflow after replacement
-    await new Promise(resolve => setTimeout(resolve, 15000));
-
-    // Emulate print media before measuring dimensions to account for print-specific layout changes
+    // NEW: Emulate print media before measuring dimensions to account for print-specific layout changes
     await page.emulateMediaType('print');
 
     const dimensions = await page.evaluate(() => {
       return {
         width: Math.min(document.documentElement.scrollWidth, 1500),
-        height: document.documentElement.scrollHeight + 0.01,
+        height: document.documentElement.scrollHeight + 0.01,  // NEW: Small buffer to prevent overflow-induced extra pages
       };
     });
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
@@ -299,7 +233,7 @@ export default async function handler(req, res) {
       printBackground: true,
       width: `${dimensions.width}px`,
       height: `${dimensions.height}px`,
-      preferCSSPageSize: false,
+      preferCSSPageSize: false,  // CHANGED: Set to false to enforce your dimensions and prevent site CSS interference
     });
     console.log('PDF generation completed');
     const pdfBuffer = fs.readFileSync(filePath);
