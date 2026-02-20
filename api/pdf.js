@@ -3,13 +3,20 @@ import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+
 export default async function handler(req, res) {
-  const { slug, url, hideSelectors = '' } = req.query;
+  const { slug, url, hideSelectors = '', maxWidth } = req.query;
+
   if (!slug || !url) {
     return res.status(400).json({ error: 'Missing slug or url.' });
   }
-  console.log(`Starting PDF generation for: ${url} with slug: ${slug}`);
+
+  const maxWidthPx = Math.min(3000, Math.max(400, parseInt(maxWidth, 10) || 1500));
+
+  console.log(`Starting PDF generation for: ${url} with slug: ${slug}, maxWidth: ${maxWidthPx}`);
+
   let browser;
+
   try {
     browser = await puppeteer.launch({
       args: chromium.args,
@@ -17,35 +24,36 @@ export default async function handler(req, res) {
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
     });
+
     const page = await browser.newPage();
-   
+
     page.setDefaultTimeout(150000);
-   
+
     await page.goto(url, {
       waitUntil: 'networkidle0',
       timeout: 150000
     });
-   
+
     await new Promise(resolve => setTimeout(resolve, 10000));
     console.log('Setting Elementor counter values to target values...');
-   
+
     const counterResults = await page.evaluate(() => {
       const counters = document.querySelectorAll('.elementor-counter-number');
       const results = [];
-     
+
       counters.forEach(counter => {
         const targetValue = counter.dataset.toValue;
         const originalValue = counter.textContent;
-       
+
         if (targetValue) {
           counter.textContent = targetValue;
-         
+
           if (originalValue.includes('+')) {
             counter.textContent += '+';
           } else if (originalValue.includes('%')) {
             counter.textContent += '%';
           }
-         
+
           results.push({
             originalValue: originalValue,
             targetValue: targetValue,
@@ -53,35 +61,36 @@ export default async function handler(req, res) {
           });
         }
       });
-     
+
       return results;
     });
-   
+
     console.log('Counter updates:', JSON.stringify(counterResults, null, 2));
+
     // Replace iframes with video player placeholder
     console.log('Replacing iframes with video player placeholders...');
     const iframeReplacements = await page.evaluate(() => {
       const iframes = document.querySelectorAll('iframe');
       const replacements = [];
-     
+
       iframes.forEach((iframe, index) => {
         try {
           const rect = iframe.getBoundingClientRect();
           const style = window.getComputedStyle(iframe);
           const width = iframe.width || iframe.offsetWidth || rect.width || 560;
           const height = iframe.height || iframe.offsetHeight || rect.height || 315;
-         
+
           // Check if visible
           const isVisible = rect.width > 0 &&
                            rect.height > 0 &&
                            style.display !== 'none' &&
                            style.visibility !== 'hidden' &&
                            style.opacity !== '0';
-         
+
           if (isVisible && iframe.src) {
             const src = iframe.src;
             let embedType = 'Video';
-           
+
             // Determine embed type
             if (src.includes('youtube.com') || src.includes('youtu.be')) {
               embedType = 'YouTube Video';
@@ -94,7 +103,7 @@ export default async function handler(req, res) {
             } else {
               embedType = 'Embedded Content';
             }
-           
+
             // Create video player placeholder
             const placeholder = document.createElement('div');
             placeholder.style.cssText = `
@@ -108,7 +117,7 @@ export default async function handler(req, res) {
               border-radius: 8px;
               overflow: hidden;
             `;
-           
+
             // Create play button
             const playButton = document.createElement('div');
             playButton.style.cssText = `
@@ -121,7 +130,7 @@ export default async function handler(req, res) {
               justify-content: center;
               box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             `;
-           
+
             // Create play triangle
             const playTriangle = document.createElement('div');
             playTriangle.style.cssText = `
@@ -132,10 +141,10 @@ export default async function handler(req, res) {
               border-color: transparent transparent transparent #667eea;
               margin-left: 6px;
             `;
-           
+
             playButton.appendChild(playTriangle);
             placeholder.appendChild(playButton);
-           
+
             // Add label at bottom
             const label = document.createElement('div');
             label.style.cssText = `
@@ -151,41 +160,44 @@ export default async function handler(req, res) {
               text-align: center;
             `;
             label.textContent = embedType;
-           
+
             placeholder.appendChild(label);
-           
+
             // Replace iframe
             iframe.parentNode.replaceChild(placeholder, iframe);
-           
+
             replacements.push({ embedType, width, height });
           }
         } catch (err) {
           console.error('Error replacing iframe:', err);
         }
       });
-     
+
       return replacements;
     });
-   
+
     console.log(`Replaced ${iframeReplacements.length} iframes:`, JSON.stringify(iframeReplacements, null, 2));
+
     // Check and open accordions
     console.log('Checking and opening accordions...');
     const accordionResults = await page.evaluate(() => {
       const summaries = document.querySelectorAll('summary.e-n-accordion-item-title');
       const count = summaries.length;
-     
+
       summaries.forEach(summary => {
         summary.click();
       });
-     
+
       return {
         count,
         opened: count > 0
       };
     });
     console.log(`Accordion check: Found ${accordionResults.count} elements. Opened: ${accordionResults.opened}`);
+
     // Wait for any animations or newly revealed content to settle
     await new Promise(resolve => setTimeout(resolve, 10000));
+
     await page.addStyleTag({
       content: `
         #colophon > .naylor-footer-background {
@@ -193,6 +205,7 @@ export default async function handler(req, res) {
         }
       `
     });
+
     if (hideSelectors) {
       const safeSelectors = hideSelectors.replace(/[^a-zA-Z0-9.#,\s:-]/g, '');
       await page.addStyleTag({
@@ -200,48 +213,55 @@ export default async function handler(req, res) {
       });
       console.log(`Applied hide selectors: ${safeSelectors}`);
     }
+
     console.log('Scrolling to bottom to trigger lazy-loaded images...');
     await page.evaluate(() => {
       window.scrollTo(0, document.body.scrollHeight);
     });
-   
+
     await new Promise(resolve => setTimeout(resolve, 10000));
-   
+
     console.log('Scrolling back to top...');
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
-   
+
     await new Promise(resolve => setTimeout(resolve, 10000));
 
-    // NEW: Emulate print media before measuring dimensions to account for print-specific layout changes
+    // Emulate print media before measuring dimensions to account for print-specific layout changes
     await page.emulateMediaType('print');
 
-    const dimensions = await page.evaluate(() => {
+    const dimensions = await page.evaluate((maxWidthPx) => {
       return {
-        width: Math.min(document.documentElement.scrollWidth, 1500),
-        height: document.documentElement.scrollHeight + 0.01,  // NEW: Small buffer to prevent overflow-induced extra pages
+        width: Math.min(document.documentElement.scrollWidth, maxWidthPx),
+        height: document.documentElement.scrollHeight + 0.01,
       };
-    });
+    }, maxWidthPx);
+
     console.log(`Page loaded. Dimensions: ${dimensions.width}x${dimensions.height}`);
+
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pdf-'));
     const filePath = path.join(tempDir, `${slug}.pdf`);
     console.log('Starting PDF generation...');
-   
+
     await page.pdf({
       path: filePath,
       printBackground: true,
       width: `${dimensions.width}px`,
       height: `${dimensions.height}px`,
-      preferCSSPageSize: false,  // CHANGED: Set to false to enforce your dimensions and prevent site CSS interference
+      preferCSSPageSize: false,
     });
+
     console.log('PDF generation completed');
+
     const pdfBuffer = fs.readFileSync(filePath);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${slug}.pdf"`);
     res.send(pdfBuffer);
+
     fs.unlinkSync(filePath);
     fs.rmSync(tempDir, { recursive: true, force: true });
+
     console.log(`PDF generation successful for: ${url}`);
   } catch (err) {
     console.error(`PDF generation failed for ${url}:`, err.message);
