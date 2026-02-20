@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   }
 
   const maxWidthPx = Math.min(3000, Math.max(400, parseInt(maxWidth, 10) || 1500));
-  const pageTimeoutMs = Math.min(180000, Math.max(0, parseInt(pageLoadTimeoutMs, 10) || 50000));
+  const pageTimeoutMs = Math.min(150000, Math.max(0, parseInt(pageLoadTimeoutMs, 10) || 15000));
   const settleDelayMs = Math.min(20000, Math.max(0, parseInt(contentSettleDelayMs, 10) || 10000));
 
   console.log(`Starting PDF generation for: ${url} with slug: ${slug}, maxWidth: ${maxWidthPx}, pageTimeout: ${pageTimeoutMs}ms, settleDelay: ${settleDelayMs}ms`);
