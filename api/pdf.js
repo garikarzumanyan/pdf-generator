@@ -5,15 +5,17 @@ import path from 'node:path';
 import os from 'node:os';
 
 export default async function handler(req, res) {
-  const { slug, url, hideSelectors = '', maxWidth } = req.query;
+  const { slug, url, hideSelectors = '', maxWidth, pageLoadTimeoutMs, contentSettleDelayMs } = req.query;
 
   if (!slug || !url) {
     return res.status(400).json({ error: 'Missing slug or url.' });
   }
 
   const maxWidthPx = Math.min(3000, Math.max(400, parseInt(maxWidth, 10) || 1500));
+  const pageTimeoutMs = Math.min(180000, Math.max(0, parseInt(pageLoadTimeoutMs, 10) || 50000));
+  const settleDelayMs = Math.min(20000, Math.max(0, parseInt(contentSettleDelayMs, 10) || 10000));
 
-  console.log(`Starting PDF generation for: ${url} with slug: ${slug}, maxWidth: ${maxWidthPx}`);
+  console.log(`Starting PDF generation for: ${url} with slug: ${slug}, maxWidth: ${maxWidthPx}, pageTimeout: ${pageTimeoutMs}ms, settleDelay: ${settleDelayMs}ms`);
 
   let browser;
 
@@ -27,14 +29,14 @@ export default async function handler(req, res) {
 
     const page = await browser.newPage();
 
-    page.setDefaultTimeout(150000);
+    page.setDefaultTimeout(pageTimeoutMs);
 
     await page.goto(url, {
       waitUntil: 'networkidle0',
-      timeout: 150000
+      timeout: pageTimeoutMs
     });
 
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    await new Promise(resolve => setTimeout(resolve, settleDelayMs));
     console.log('Setting Elementor counter values to target values...');
 
     const counterResults = await page.evaluate(() => {
@@ -80,7 +82,6 @@ export default async function handler(req, res) {
           const width = iframe.width || iframe.offsetWidth || rect.width || 560;
           const height = iframe.height || iframe.offsetHeight || rect.height || 315;
 
-          // Check if visible
           const isVisible = rect.width > 0 &&
                            rect.height > 0 &&
                            style.display !== 'none' &&
@@ -91,7 +92,6 @@ export default async function handler(req, res) {
             const src = iframe.src;
             let embedType = 'Video';
 
-            // Determine embed type
             if (src.includes('youtube.com') || src.includes('youtu.be')) {
               embedType = 'YouTube Video';
             } else if (src.includes('vimeo.com')) {
@@ -104,7 +104,6 @@ export default async function handler(req, res) {
               embedType = 'Embedded Content';
             }
 
-            // Create video player placeholder
             const placeholder = document.createElement('div');
             placeholder.style.cssText = `
               width: ${width}px;
@@ -118,7 +117,6 @@ export default async function handler(req, res) {
               overflow: hidden;
             `;
 
-            // Create play button
             const playButton = document.createElement('div');
             playButton.style.cssText = `
               width: 80px;
@@ -131,7 +129,6 @@ export default async function handler(req, res) {
               box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             `;
 
-            // Create play triangle
             const playTriangle = document.createElement('div');
             playTriangle.style.cssText = `
               width: 0;
@@ -145,7 +142,6 @@ export default async function handler(req, res) {
             playButton.appendChild(playTriangle);
             placeholder.appendChild(playButton);
 
-            // Add label at bottom
             const label = document.createElement('div');
             label.style.cssText = `
               position: absolute;
@@ -162,10 +158,7 @@ export default async function handler(req, res) {
             label.textContent = embedType;
 
             placeholder.appendChild(label);
-
-            // Replace iframe
             iframe.parentNode.replaceChild(placeholder, iframe);
-
             replacements.push({ embedType, width, height });
           }
         } catch (err) {
@@ -183,20 +176,12 @@ export default async function handler(req, res) {
     const accordionResults = await page.evaluate(() => {
       const summaries = document.querySelectorAll('summary.e-n-accordion-item-title');
       const count = summaries.length;
-
-      summaries.forEach(summary => {
-        summary.click();
-      });
-
-      return {
-        count,
-        opened: count > 0
-      };
+      summaries.forEach(summary => summary.click());
+      return { count, opened: count > 0 };
     });
     console.log(`Accordion check: Found ${accordionResults.count} elements. Opened: ${accordionResults.opened}`);
 
-    // Wait for any animations or newly revealed content to settle
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    await new Promise(resolve => setTimeout(resolve, settleDelayMs));
 
     await page.addStyleTag({
       content: `
@@ -218,17 +203,14 @@ export default async function handler(req, res) {
     await page.evaluate(() => {
       window.scrollTo(0, document.body.scrollHeight);
     });
-
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    await new Promise(resolve => setTimeout(resolve, settleDelayMs));
 
     console.log('Scrolling back to top...');
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
+    await new Promise(resolve => setTimeout(resolve, settleDelayMs));
 
-    await new Promise(resolve => setTimeout(resolve, 10000));
-
-    // Emulate print media before measuring dimensions to account for print-specific layout changes
     await page.emulateMediaType('print');
 
     const dimensions = await page.evaluate((maxWidthPx) => {
